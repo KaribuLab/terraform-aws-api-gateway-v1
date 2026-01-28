@@ -1,0 +1,47 @@
+# Terraform files
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+.terraform.tfstate.lock.info
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Test artifacts
+test/fixtures/**/lambda_function.zip
+test/fixtures/**/.terraform/
+test/fixtures/**/.terraform.lock.hcl
+test/fixtures/**/*.tfstate
+test/fixtures/**/*.tfstate.*
+
+# Go test artifacts
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS files
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
