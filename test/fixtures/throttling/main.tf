@@ -38,14 +38,14 @@ resource "aws_api_gateway_method" "test" {
 resource "aws_api_gateway_integration" "test" {
   rest_api_id = module.api_gateway.rest_api_id
   resource_id = aws_api_gateway_resource.test.id
-  http_method  = aws_api_gateway_method.test.http_method
-  type         = "MOCK"
+  http_method = aws_api_gateway_method.test.http_method
+  type        = "MOCK"
 }
 
 # Crear deployment
 resource "aws_api_gateway_deployment" "test" {
   rest_api_id = module.api_gateway.rest_api_id
-  
+
   triggers = {
     redeployment = sha1(jsonencode([
       aws_api_gateway_resource.test.id,
@@ -64,7 +64,7 @@ resource "aws_api_gateway_stage" "test" {
   rest_api_id   = module.api_gateway.rest_api_id
   deployment_id = aws_api_gateway_deployment.test.id
   stage_name    = var.stage_name
-  
+
   tags = var.tags
 }
 
@@ -73,7 +73,7 @@ resource "aws_api_gateway_method_settings" "test" {
   rest_api_id = module.api_gateway.rest_api_id
   stage_name  = aws_api_gateway_stage.test.stage_name
   method_path = "${aws_api_gateway_resource.test.path_part}/${aws_api_gateway_method.test.http_method}"
-  
+
   settings {
     throttling_burst_limit = 100
     throttling_rate_limit  = 50

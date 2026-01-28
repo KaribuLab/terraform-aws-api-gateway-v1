@@ -21,8 +21,8 @@ module "api_gateway" {
   # stage_config = null (por defecto, no crea stage)
 
   # Configuración de API Key
-  enable_api_key = true
-  api_key_name   = var.api_key_name
+  enable_api_key      = true
+  api_key_name        = var.api_key_name
   api_key_description = "Test API Key"
 
   usage_plan_config = {

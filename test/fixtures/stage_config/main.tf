@@ -42,14 +42,14 @@ resource "aws_api_gateway_method" "test" {
 resource "aws_api_gateway_integration" "test" {
   rest_api_id = module.api_gateway.rest_api_id
   resource_id = aws_api_gateway_resource.test.id
-  http_method  = aws_api_gateway_method.test.http_method
-  type         = "MOCK"
+  http_method = aws_api_gateway_method.test.http_method
+  type        = "MOCK"
 }
 
 # Crear deployment
 resource "aws_api_gateway_deployment" "test" {
   rest_api_id = module.api_gateway.rest_api_id
-  
+
   triggers = {
     redeployment = sha1(jsonencode([
       aws_api_gateway_resource.test.id,
@@ -72,7 +72,7 @@ module "api_gateway_with_stage" {
   api_name        = "${var.api_name}-with-stage"
   api_description = var.api_description
   tags            = var.tags
-  
+
   # stage_config se define después de crear el deployment para este módulo
 }
 
@@ -93,14 +93,14 @@ resource "aws_api_gateway_method" "test2" {
 resource "aws_api_gateway_integration" "test2" {
   rest_api_id = module.api_gateway_with_stage.rest_api_id
   resource_id = aws_api_gateway_resource.test2.id
-  http_method  = aws_api_gateway_method.test2.http_method
-  type         = "MOCK"
+  http_method = aws_api_gateway_method.test2.http_method
+  type        = "MOCK"
 }
 
 # Deployment para el segundo módulo
 resource "aws_api_gateway_deployment" "test2" {
   rest_api_id = module.api_gateway_with_stage.rest_api_id
-  
+
   triggers = {
     redeployment = sha1(jsonencode([
       aws_api_gateway_resource.test2.id,
@@ -126,10 +126,10 @@ resource "aws_api_gateway_stage" "test" {
   rest_api_id   = module.api_gateway_with_stage.rest_api_id
   deployment_id = aws_api_gateway_deployment.test2.id
   stage_name    = var.stage_name
-  
+
   cache_cluster_enabled = var.cache_cluster_enabled
   cache_cluster_size    = var.cache_cluster_enabled ? var.cache_cluster_size : null
-  
+
   tags = var.tags
 }
 
