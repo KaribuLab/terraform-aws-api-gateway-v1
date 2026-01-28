@@ -9,7 +9,7 @@ set -euo pipefail
 REPOSITORY_TAG="github.com/KaribuLab/terraform-aws-api-gateway-v1"
 TERRATEST_TAG="true"
 MAX_AGE_HOURS=2
-REGION="${AWS_REGION:-us-east-1}"
+REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"
 
 # Usar perfil de AWS si está especificado
 if [[ -n "${AWS_PROFILE:-}" ]]; then

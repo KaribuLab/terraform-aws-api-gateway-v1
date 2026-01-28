@@ -1,0 +1,107 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - "main"
+
+jobs:
+  test:
+    name: Terratest
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    env:
+      AWS_DEFAULT_REGION: us-west-2
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.6.0'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_INFRA_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_DEFAULT_REGION }}
+
+      - name: Install dependencies
+        working-directory: test
+        run: go mod download
+
+      - name: Run Terratest with cleanup
+        run: bash scripts/run_tests.sh
+        env:
+          AWS_DEFAULT_REGION: ${{ env.AWS_DEFAULT_REGION }}
+
+  check_tag:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    outputs:
+      tag_exists: ${{ steps.check_tag.outputs.tag_exists }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download kli
+        id: download_kli
+        run: |
+          curl -sL https://github.com/KaribuLab/kli/releases/download/v0.2.2/kli  --output kli
+      - name: Check tag
+        id: check_tag
+        run: |
+          chmod +x ./kli
+          LATEST_VERSION=$( ./kli semver 2>&1 )
+          LATEST_GIT_TAG=$( git describe --tags --abbrev=0 || echo "" )
+          echo "latest_version=$LATEST_VERSION"
+          echo "latest_git_tag=$LATEST_GIT_TAG"
+          if [ "$LATEST_VERSION" == "$LATEST_GIT_TAG" ]; then
+            echo "tag_exists=true"
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_exists=false"
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kli
+          path: kli
+
+  create_tag:
+    needs: [test, check_tag]
+    runs-on: ubuntu-latest
+    if: needs.check_tag.outputs.tag_exists == 'false' && github.ref == 'refs/heads/main'
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Git user
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Download kli
+        uses: actions/download-artifact@v4
+        with:
+          name: kli
+          path: ./
+      - name: Create tag
+        id: create_tag
+        run: |
+          chmod +x kli
+          ./kli semver -tv
