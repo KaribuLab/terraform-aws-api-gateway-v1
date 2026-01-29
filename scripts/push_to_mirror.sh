@@ -4,11 +4,17 @@
 
 set -euo pipefail
 
-# Check if the branch feature/karibu-mirror exists
-if git branch -r | grep -q "origin/feature/karibu-mirror"; then
-    echo "Branch feature/karibu-mirror exists"
+# Actualizar referencias remotas primero
+git fetch origin
+
+# Verificar si la rama existe remotamente usando ls-remote (más confiable)
+if git ls-remote --heads origin feature/karibu-mirror | grep -q feature/karibu-mirror; then
+    echo "Branch feature/karibu-mirror exists remotely"
+    git checkout feature/karibu-mirror 2>/dev/null || git checkout -b feature/karibu-mirror origin/feature/karibu-mirror
 else
-    echo "Branch feature/karibu-mirror does not exist"
+    echo "Branch feature/karibu-mirror does not exist remotely, creating it"
+    # Asegurarse de estar en la rama base master antes de crear la nueva rama
+    git checkout master
     git checkout -b feature/karibu-mirror
 fi
 curl -sL https://github.com/KaribuLab/kli/releases/download/v0.2.2/kli  --output /tmp/kli && chmod +x /tmp/kli
@@ -19,8 +25,8 @@ latest_version=$( /tmp/kli semver 2>&1 )
 git add --all
 # Commit changes
 git commit -m "feat: Mirror from GitHub: $commit_message" || true
-# Push to bitbucket
-git push origin feature/karibu-mirror
+# Push to bitbucket (usar -u para crear la rama remota si no existe)
+git push -u origin feature/karibu-mirror
 # Create a new tag
 if [ "$previous_version" != "$latest_version" ]; then
     echo "Creating new tag: $latest_version"
