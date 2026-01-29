@@ -7,38 +7,26 @@ set -euo pipefail
 # Actualizar referencias remotas primero
 git fetch origin
 
-# Guardar cambios locales temporalmente si existen
-if [ -n "$(git status --porcelain)" ]; then
-    echo "Saving local changes..."
-    git add --all
-    git stash push -m "Temporary stash before branch switch"
-    stash_created=true
-else
-    stash_created=false
-fi
+# Agregar todos los archivos al staging area ANTES de cambiar de rama
+# Esto evita el error de "archivos sin seguimiento serán sobrescritos"
+git add --all
 
 # Verificar si la rama existe remotamente usando ls-remote (más confiable)
 if git ls-remote --heads origin feature/karibu-mirror | grep -q feature/karibu-mirror; then
     echo "Branch feature/karibu-mirror exists remotely"
-    git checkout feature/karibu-mirror 2>/dev/null || git checkout -b feature/karibu-mirror origin/feature/karibu-mirror
+    # Cambiar a la rama existente (con -f para forzar si hay conflictos)
+    git checkout -f feature/karibu-mirror
+    # Hacer pull para obtener los últimos cambios
+    git pull origin feature/karibu-mirror || true
 else
     echo "Branch feature/karibu-mirror does not exist remotely, creating it"
-    # Asegurarse de estar en la rama base master antes de crear la nueva rama
-    git checkout master
+    # Crear la rama desde master (los archivos ya están en staging)
     git checkout -b feature/karibu-mirror
-fi
-
-# Restaurar cambios guardados si se hizo stash
-if [ "$stash_created" = true ]; then
-    echo "Restoring local changes..."
-    git stash pop
 fi
 curl -sL https://github.com/KaribuLab/kli/releases/download/v0.2.2/kli  --output /tmp/kli && chmod +x /tmp/kli
 commit_message=$( git log -1 --pretty=%B )
 previous_version=$( git describe --tags --abbrev=0 || echo "" )
 latest_version=$( /tmp/kli semver 2>&1 )
-# Add all changes
-git add --all
 # Commit changes
 git commit -m "feat: Mirror from GitHub: $commit_message" || true
 # Push to bitbucket (usar -u para crear la rama remota si no existe)

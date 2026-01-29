@@ -44,10 +44,8 @@ jobs:
             ./ bitbucket-repo/karibu/terraform-aws-api-gateway-v1/
           
       - name: Commit and push to Bitbucket
+        working-directory: bitbucket-repo
         env:
           BITBUCKET_USERNAME: ${{ secrets.BITBUCKET_USERNAME }}
           BITBUCKET_API_TOKEN: ${{ secrets.BITBUCKET_API_TOKEN }}
-        run: |
-          cwd=$(pwd)
-          cd bitbucket-repo
-          $cwd/scripts/push_to_mirror.sh
+        run: bash ../scripts/push_to_mirror.sh
