@@ -47,4 +47,4 @@ desktop.ini
 *.backup
 
 .env
-bitbucket-repo/
+bitbucket-repo

@@ -1,4 +1,4 @@
-.PHONY: test test-basic test-auth test-security test-performance test-stage-config cleanup help
+.PHONY: test test-basic test-auth test-security test-performance test-stage-config test-lambda-resource cleanup help
 
 # Variables
 TEST_DIR := test
@@ -37,6 +37,10 @@ test-performance: ## Ejecutar tests de performance (Caché y Throttling)
 test-stage-config: ## Ejecutar test de stage_config
 	@echo "Ejecutando test de stage_config..."
 	cd $(TEST_DIR) && AWS_PROFILE=$(AWS_PROFILE) go test -v -count=1 -timeout 30m -run TestStageConfig ./...
+
+test-lambda-resource: ## Ejecutar test del submódulo Lambda
+	@echo "Ejecutando test del submódulo Lambda..."
+	cd $(TEST_DIR) && AWS_PROFILE=$(AWS_PROFILE) go test -v -count=1 -timeout 30m -run TestLambdaResourceModule ./...
 
 cleanup: ## Ejecutar solo la limpieza de recursos huérfanos (usa AWS_PROFILE si está configurado)
 	@if [ -n "$(AWS_PROFILE)" ]; then \
