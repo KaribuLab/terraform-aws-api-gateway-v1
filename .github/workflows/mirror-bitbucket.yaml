@@ -1,0 +1,53 @@
+name: mirror-bitbucket
+
+on:
+  workflow_run:
+    workflows: ["ci"]
+    types:
+      - completed
+    branches:
+      - main
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout GitHub repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Clonar historial completo para mirror
+
+      - name: Setup Git configuration
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Clone Bitbucket repository
+        env:
+          BITBUCKET_USERNAME: ${{ secrets.BITBUCKET_USERNAME }}
+          BITBUCKET_API_TOKEN: ${{ secrets.BITBUCKET_API_TOKEN }}
+          BITBUCKET_REPO_URL_CLARO: ${{ secrets.BITBUCKET_REPO_URL_CLARO }}
+        run: |
+          # Clonar repo de Bitbucket
+          git clone https://${BITBUCKET_USERNAME}:${BITBUCKET_API_TOKEN}@${BITBUCKET_REPO_URL_CLARO} bitbucket-repo
+          
+      - name: Sync to karibu directory
+        run: |
+          # Crear directorio karibu si no existe
+          mkdir -p bitbucket-repo/karibu/terraform-aws-api-gateway-v1
+          
+          # Copiar contenido del repo actual al subdirectorio karibu
+          rsync -av --delete \
+            --exclude='.git' \
+            --exclude='bitbucket-repo' \
+            ./ bitbucket-repo/karibu/terraform-aws-api-gateway-v1/
+          
+      - name: Commit and push to Bitbucket
+        env:
+          BITBUCKET_USERNAME: ${{ secrets.BITBUCKET_USERNAME }}
+          BITBUCKET_API_TOKEN: ${{ secrets.BITBUCKET_API_TOKEN }}
+        run: |
+          cwd=$(pwd)
+          cd bitbucket-repo
+          $cwd/scripts/push_to_mirror.sh
