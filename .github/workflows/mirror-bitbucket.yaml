@@ -51,4 +51,7 @@ jobs:
         env:
           BITBUCKET_USERNAME: ${{ secrets.BITBUCKET_USERNAME }}
           BITBUCKET_API_TOKEN: ${{ secrets.BITBUCKET_API_TOKEN }}
+          BITBUCKET_USER_EMAIL: ${{ secrets.BITBUCKET_USER_EMAIL }}
+          BITBUCKET_WORKSPACE_CLARO: ${{ secrets.BITBUCKET_WORKSPACE_CLARO }}
+          BITBUCKET_REPO_NAME_CLARO: ${{ secrets.BITBUCKET_REPO_NAME_CLARO }}
         run: bash ../scripts/push_to_mirror.sh
