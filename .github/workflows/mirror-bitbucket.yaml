@@ -41,6 +41,9 @@ jobs:
           rsync -av --delete \
             --exclude='.git' \
             --exclude='bitbucket-repo' \
+            --exclude='.github' \
+            --exclude='scripts' \
+            --exclude='test' \
             ./ bitbucket-repo/karibu/terraform-aws-api-gateway-v1/
           
       - name: Commit and push to Bitbucket

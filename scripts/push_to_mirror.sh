@@ -40,4 +40,4 @@ if [ "$previous_version" != "$latest_version" ]; then
     git push origin $latest_version
 fi
 # Create a pull request to Bitbucket
-curl -i -X POST -u $BITBUCKET_USER_EMAIL:$BITBUCKET_API_TOKEN -H "Content-Type: application/json" -d '{"title": "Mirror from GitHub", "description": "Mirror from GitHub: $commit_message", "source": {"branch": {"name": "feature/karibu-mirror"}}, "destination": {"branch": {"name": "master"}}, "close_source_branch": true}' https://api.bitbucket.org/2.0/repositories/vtr-digital/tf_modules/pullrequests
+curl -i -X POST -u $BITBUCKET_USER_EMAIL:$BITBUCKET_API_TOKEN -H "Content-Type: application/json" -d '{"title": "Mirror from GitHub", "description": "Mirror from GitHub: $commit_message", "source": {"branch": {"name": "feature/karibu-mirror"}}, "destination": {"branch": {"name": "master"}}, "close_source_branch": true}' https://api.bitbucket.org/2.0/repositories/$BITBUCKET_WORKSPACE_CLARO/$BITBUCKET_REPO_NAME_CLARO/pullrequests
