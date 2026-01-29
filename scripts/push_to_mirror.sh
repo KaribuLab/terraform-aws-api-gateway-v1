@@ -7,6 +7,16 @@ set -euo pipefail
 # Actualizar referencias remotas primero
 git fetch origin
 
+# Guardar cambios locales temporalmente si existen
+if [ -n "$(git status --porcelain)" ]; then
+    echo "Saving local changes..."
+    git add --all
+    git stash push -m "Temporary stash before branch switch"
+    stash_created=true
+else
+    stash_created=false
+fi
+
 # Verificar si la rama existe remotamente usando ls-remote (más confiable)
 if git ls-remote --heads origin feature/karibu-mirror | grep -q feature/karibu-mirror; then
     echo "Branch feature/karibu-mirror exists remotely"
@@ -16,6 +26,12 @@ else
     # Asegurarse de estar en la rama base master antes de crear la nueva rama
     git checkout master
     git checkout -b feature/karibu-mirror
+fi
+
+# Restaurar cambios guardados si se hizo stash
+if [ "$stash_created" = true ]; then
+    echo "Restoring local changes..."
+    git stash pop
 fi
 curl -sL https://github.com/KaribuLab/kli/releases/download/v0.2.2/kli  --output /tmp/kli && chmod +x /tmp/kli
 commit_message=$( git log -1 --pretty=%B )
