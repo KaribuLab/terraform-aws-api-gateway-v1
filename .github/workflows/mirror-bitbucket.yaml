@@ -44,6 +44,14 @@ jobs:
             --exclude='.github' \
             --exclude='scripts' \
             --exclude='test' \
+            --exclude='.env' \
+            --exclude='.terraform' \
+            --exclude='.terraform.lock.hcl' \
+            --exclude='.terraform.tfstate' \
+            --exclude='.terraform.tfstate.backup' \
+            --exclude='terraform.tfstate' \
+            --exclude='terraform.tfstate.backup' \
+            --exclude='terraform.tfvars' \
             ./ bitbucket-repo/karibu/terraform-aws-api-gateway-v1/
           
       - name: Commit and push to Bitbucket
