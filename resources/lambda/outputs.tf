@@ -1,11 +1,11 @@
 output "resource_id" {
-  description = "ID del recurso de API Gateway creado"
-  value       = aws_api_gateway_resource.this.id
+  description = "ID del recurso de API Gateway"
+  value       = local.resource_id
 }
 
 output "resource_path" {
-  description = "Path completo del recurso"
-  value       = aws_api_gateway_resource.this.path
+  description = "Path completo del recurso (solo disponible si el recurso fue creado por este módulo)"
+  value       = var.create_resource ? aws_api_gateway_resource.this[0].path : null
 }
 
 output "method_id" {
@@ -19,6 +19,6 @@ output "integration_id" {
 }
 
 output "invoke_url_path" {
-  description = "Path para invocar el endpoint (usar con invoke_url del stage)"
-  value       = aws_api_gateway_resource.this.path
+  description = "Path para invocar el endpoint (usar con invoke_url del stage). Solo disponible si el recurso fue creado por este módulo"
+  value       = var.create_resource ? aws_api_gateway_resource.this[0].path : null
 }

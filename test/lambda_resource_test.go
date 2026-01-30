@@ -33,28 +33,34 @@ func TestLambdaResourceModule(t *testing.T) {
 	restAPIID := terraform.Output(t, terraformOptions, "rest_api_id")
 	assert.NotEmpty(t, restAPIID, "rest_api_id should not be empty")
 
+	// Validar outputs del módulo parent (recurso compartido)
+	usersResourceID := terraform.Output(t, terraformOptions, "users_resource_id")
+	usersResourcePath := terraform.Output(t, terraformOptions, "users_resource_path")
+
+	assert.NotEmpty(t, usersResourceID, "users_resource_id should not be empty")
+	assert.Equal(t, "/users", usersResourcePath, "users_resource_path should be '/users'")
+
+	require.NotNil(t, usersResourceID)
+	require.NotNil(t, usersResourcePath)
+
 	// Validar outputs del módulo users_get (GET /users)
 	usersGetResourceID := terraform.Output(t, terraformOptions, "users_get_resource_id")
-	usersGetResourcePath := terraform.Output(t, terraformOptions, "users_get_resource_path")
 	usersGetMethodID := terraform.Output(t, terraformOptions, "users_get_method_id")
 
 	assert.NotEmpty(t, usersGetResourceID, "users_get_resource_id should not be empty")
-	assert.Equal(t, "/users", usersGetResourcePath, "users_get_resource_path should be '/users'")
+	assert.Equal(t, usersResourceID, usersGetResourceID, "users_get_resource_id should match users_resource_id")
 	assert.NotEmpty(t, usersGetMethodID, "users_get_method_id should not be empty")
 
 	require.NotNil(t, usersGetResourceID)
-	require.NotNil(t, usersGetResourcePath)
 	require.NotNil(t, usersGetMethodID)
 
 	// Validar outputs del módulo users_post (POST /users con CORS)
 	usersPostResourceID := terraform.Output(t, terraformOptions, "users_post_resource_id")
-	usersPostResourcePath := terraform.Output(t, terraformOptions, "users_post_resource_path")
 
 	assert.NotEmpty(t, usersPostResourceID, "users_post_resource_id should not be empty")
-	assert.Equal(t, "/users", usersPostResourcePath, "users_post_resource_path should be '/users'")
+	assert.Equal(t, usersResourceID, usersPostResourceID, "users_post_resource_id should match users_resource_id")
 
 	require.NotNil(t, usersPostResourceID)
-	require.NotNil(t, usersPostResourcePath)
 
 	// Validar Lambda
 	lambdaFunctionName := terraform.Output(t, terraformOptions, "lambda_function_name")

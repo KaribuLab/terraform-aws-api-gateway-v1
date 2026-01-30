@@ -1,14 +1,21 @@
-# Crear recurso de API Gateway
+# Crear recurso solo si create_resource es true
 resource "aws_api_gateway_resource" "this" {
+  count = var.create_resource ? 1 : 0
+
   rest_api_id = var.rest_api_id
   parent_id   = var.parent_resource_id
   path_part   = var.path_part
 }
 
+# Usar el resource_id proporcionado o el creado internamente
+locals {
+  resource_id = var.create_resource ? aws_api_gateway_resource.this[0].id : var.resource_id
+}
+
 # Método principal (GET, POST, etc.)
 resource "aws_api_gateway_method" "this" {
   rest_api_id   = var.rest_api_id
-  resource_id   = aws_api_gateway_resource.this.id
+  resource_id   = local.resource_id
   http_method   = var.http_method
   authorization = var.authorizer_id != null ? "CUSTOM" : var.authorization_type
   authorizer_id = var.authorizer_id
@@ -23,7 +30,7 @@ resource "aws_api_gateway_method" "this" {
 # Integración con Lambda
 resource "aws_api_gateway_integration" "this" {
   rest_api_id = var.rest_api_id
-  resource_id = aws_api_gateway_resource.this.id
+  resource_id = local.resource_id
   http_method = aws_api_gateway_method.this.http_method
 
   integration_http_method = "POST"
@@ -36,7 +43,7 @@ resource "aws_api_gateway_integration" "this" {
 
 # Permiso para que API Gateway invoque Lambda
 resource "aws_lambda_permission" "this" {
-  statement_id  = "AllowAPIGatewayInvoke-${var.path_part}-${var.http_method}"
+  statement_id  = "AllowAPIGatewayInvoke-${var.path_part != null ? var.path_part : "resource"}-${var.http_method}"
   action        = "lambda:InvokeFunction"
   function_name = var.lambda_function_name
   principal     = "apigateway.amazonaws.com"
@@ -48,7 +55,7 @@ resource "aws_api_gateway_method_response" "this" {
   for_each = var.method_responses
 
   rest_api_id = var.rest_api_id
-  resource_id = aws_api_gateway_resource.this.id
+  resource_id = local.resource_id
   http_method = aws_api_gateway_method.this.http_method
   status_code = each.key
 
@@ -61,7 +68,7 @@ resource "aws_api_gateway_integration_response" "this" {
   for_each = var.integration_responses
 
   rest_api_id = var.rest_api_id
-  resource_id = aws_api_gateway_resource.this.id
+  resource_id = local.resource_id
   http_method = aws_api_gateway_method.this.http_method
   status_code = each.key
 
@@ -79,7 +86,7 @@ resource "aws_api_gateway_method" "options" {
   count = var.enable_cors ? 1 : 0
 
   rest_api_id   = var.rest_api_id
-  resource_id   = aws_api_gateway_resource.this.id
+  resource_id   = local.resource_id
   http_method   = "OPTIONS"
   authorization = "NONE"
 }
@@ -88,7 +95,7 @@ resource "aws_api_gateway_integration" "options" {
   count = var.enable_cors ? 1 : 0
 
   rest_api_id = var.rest_api_id
-  resource_id = aws_api_gateway_resource.this.id
+  resource_id = local.resource_id
   http_method = aws_api_gateway_method.options[0].http_method
 
   type = "MOCK"
@@ -102,7 +109,7 @@ resource "aws_api_gateway_method_response" "options" {
   count = var.enable_cors ? 1 : 0
 
   rest_api_id = var.rest_api_id
-  resource_id = aws_api_gateway_resource.this.id
+  resource_id = local.resource_id
   http_method = aws_api_gateway_method.options[0].http_method
   status_code = "200"
 
@@ -117,7 +124,7 @@ resource "aws_api_gateway_integration_response" "options" {
   count = var.enable_cors ? 1 : 0
 
   rest_api_id = var.rest_api_id
-  resource_id = aws_api_gateway_resource.this.id
+  resource_id = local.resource_id
   http_method = aws_api_gateway_method.options[0].http_method
   status_code = "200"
 

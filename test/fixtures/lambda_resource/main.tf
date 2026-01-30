@@ -63,15 +63,24 @@ data "archive_file" "lambda_zip" {
   output_path = "${path.module}/lambda_function.zip"
 }
 
-# Usar el submódulo para crear el endpoint GET /users
+# Crear el recurso /users usando el submódulo parent
+module "users_resource" {
+  source = "../../../resources/parent"
+
+  rest_api_id        = module.api_gateway.rest_api_id
+  parent_resource_id = module.api_gateway.rest_api_root_resource_id
+  path_part          = "users"
+}
+
+# GET /users - usar el recurso compartido
 module "users_get" {
   source = "../../../resources/lambda"
 
   rest_api_id            = module.api_gateway.rest_api_id
-  parent_resource_id     = module.api_gateway.rest_api_root_resource_id
+  resource_id            = module.users_resource.resource_id
+  create_resource        = false
   rest_api_execution_arn = module.api_gateway.rest_api_execution_arn
 
-  path_part            = "users"
   http_method          = "GET"
   lambda_function_name = aws_lambda_function.test.function_name
   lambda_invoke_arn    = aws_lambda_function.test.invoke_arn
@@ -80,15 +89,15 @@ module "users_get" {
   authorization_type = "NONE"
 }
 
-# Usar el submódulo para crear el endpoint POST /users con CORS
+# POST /users - usar el mismo recurso compartido
 module "users_post" {
   source = "../../../resources/lambda"
 
   rest_api_id            = module.api_gateway.rest_api_id
-  parent_resource_id     = module.api_gateway.rest_api_root_resource_id
+  resource_id            = module.users_resource.resource_id
+  create_resource        = false
   rest_api_execution_arn = module.api_gateway.rest_api_execution_arn
 
-  path_part            = "users"
   http_method          = "POST"
   lambda_function_name = aws_lambda_function.test.function_name
   lambda_invoke_arn    = aws_lambda_function.test.invoke_arn

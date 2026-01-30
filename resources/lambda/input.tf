@@ -5,8 +5,9 @@ variable "rest_api_id" {
 }
 
 variable "parent_resource_id" {
-  description = "ID del recurso padre (típicamente root_resource_id)"
+  description = "ID del recurso padre (típicamente root_resource_id). Requerido solo si create_resource es true"
   type        = string
+  default     = null
 }
 
 variable "rest_api_execution_arn" {
@@ -15,9 +16,22 @@ variable "rest_api_execution_arn" {
 }
 
 # Variables del recurso
-variable "path_part" {
-  description = "Parte del path para este recurso (ej: 'users', 'products')"
+variable "create_resource" {
+  description = "Si se debe crear un nuevo recurso de API Gateway. Si es false, se debe proporcionar resource_id"
+  type        = bool
+  default     = true
+}
+
+variable "resource_id" {
+  description = "ID del recurso de API Gateway (si ya existe). Requerido si create_resource es false"
   type        = string
+  default     = null
+}
+
+variable "path_part" {
+  description = "Parte del path para este recurso (ej: 'users', 'products'). Requerido solo si create_resource es true"
+  type        = string
+  default     = null
 }
 
 variable "http_method" {

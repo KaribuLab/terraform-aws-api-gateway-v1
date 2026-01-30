@@ -2,6 +2,14 @@ output "rest_api_id" {
   value = module.api_gateway.rest_api_id
 }
 
+output "users_resource_id" {
+  value = module.users_resource.resource_id
+}
+
+output "users_resource_path" {
+  value = module.users_resource.resource_path
+}
+
 output "users_get_resource_id" {
   value = module.users_get.resource_id
 }
