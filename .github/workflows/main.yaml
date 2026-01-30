@@ -43,6 +43,7 @@ jobs:
         run: bash scripts/run_tests.sh
         env:
           AWS_DEFAULT_REGION: ${{ env.AWS_DEFAULT_REGION }}
+          SKIP_SLOW_TESTS: "true"
 
   check_tag:
     needs: test

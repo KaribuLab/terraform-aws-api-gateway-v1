@@ -3,10 +3,12 @@ package helpers
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/gruntwork-io/terratest/modules/files"
 	"github.com/gruntwork-io/terratest/modules/random"
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/require"
@@ -61,6 +63,39 @@ func TerraformOptionsWithDefaults(terraformDir string, region string) *terraform
 // TerraformOptionsWithVars crea opciones de Terraform con variables adicionales
 func TerraformOptionsWithVars(terraformDir string, region string, vars map[string]interface{}) *terraform.Options {
 	options := TerraformOptionsWithDefaults(terraformDir, region)
+	for k, v := range vars {
+		options.Vars[k] = v
+	}
+	return options
+}
+
+// CopyFixtureToTemp copia un directorio de fixtures a un directorio temporal único
+// Esto evita condiciones de carrera cuando múltiples tests se ejecutan en paralelo
+func CopyFixtureToTemp(t *testing.T, fixtureDir string) string {
+	uniqueID := strings.ToLower(random.UniqueId())
+	tempDir := filepath.Join(os.TempDir(), fmt.Sprintf("terratest-%s", uniqueID))
+
+	// Crear el directorio temporal
+	err := os.MkdirAll(tempDir, 0755)
+	require.NoError(t, err, "Failed to create temp directory")
+
+	// Copiar el contenido del fixture al directorio temporal
+	err = files.CopyFolderContents(fixtureDir, tempDir)
+	require.NoError(t, err, "Failed to copy fixture to temp directory")
+
+	// Registrar limpieza cuando el test termine
+	t.Cleanup(func() {
+		os.RemoveAll(tempDir)
+	})
+
+	return tempDir
+}
+
+// TerraformOptionsWithUniqueWorkdir crea opciones de Terraform con un directorio de trabajo único
+// Copia el fixture a un directorio temporal para evitar condiciones de carrera en tests paralelos
+func TerraformOptionsWithUniqueWorkdir(t *testing.T, fixtureDir string, region string, vars map[string]interface{}) *terraform.Options {
+	tempDir := CopyFixtureToTemp(t, fixtureDir)
+	options := TerraformOptionsWithDefaults(tempDir, region)
 	for k, v := range vars {
 		options.Vars[k] = v
 	}

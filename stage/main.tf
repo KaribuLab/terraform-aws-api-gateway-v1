@@ -1,4 +1,7 @@
-# Crear deployment (siempre nuevo)
+# Crear deployment
+# Usamos create_before_destroy = true para permitir actualizaciones sin downtime.
+# El nuevo deployment se crea primero, luego el stage se actualiza para apuntar
+# al nuevo deployment, y finalmente el deployment viejo se destruye.
 resource "aws_api_gateway_deployment" "this" {
   rest_api_id = var.rest_api_id
   description = var.deployment_description

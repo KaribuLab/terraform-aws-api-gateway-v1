@@ -1,6 +1,7 @@
 package test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/KaribuLab/terraform-aws-api-gateway-v1/test/helpers"
@@ -10,7 +11,8 @@ import (
 )
 
 func TestStageModule(t *testing.T) {
-	t.Parallel()
+	// No ejecutar en paralelo para evitar condiciones de carrera con el estado de Terraform
+	// cuando múltiples tests usan el mismo directorio de fixtures
 
 	region := helpers.GetAWSRegion()
 	testName := helpers.GenerateTestName("test-stage-module")
@@ -58,7 +60,14 @@ func TestStageModule(t *testing.T) {
 }
 
 func TestStageModuleWithCacheAndThrottling(t *testing.T) {
-	t.Parallel()
+	// Omitir si la variable de entorno SKIP_SLOW_TESTS está configurada
+	// El aprovisionamiento del cache de API Gateway tarda ~7 minutos
+	if os.Getenv("SKIP_SLOW_TESTS") == "true" {
+		t.Skip("Omitido: SKIP_SLOW_TESTS=true (el cache de API Gateway tarda ~7 minutos)")
+	}
+
+	// No ejecutar en paralelo para evitar condiciones de carrera con el estado de Terraform
+	// cuando múltiples tests usan el mismo directorio de fixtures
 
 	region := helpers.GetAWSRegion()
 	testName := helpers.GenerateTestName("test-stage-module-cache")

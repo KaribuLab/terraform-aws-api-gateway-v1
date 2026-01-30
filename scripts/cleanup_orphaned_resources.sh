@@ -171,11 +171,23 @@ log_info "Buscando WAF Web ACLs de prueba..."
 waf_acls=$(aws wafv2 list-web-acls --scope REGIONAL --region "$REGION" --query "WebACLs[]" --output json 2>/dev/null || echo "[]")
 
 if [[ "$waf_acls" != "[]" && "$waf_acls" != "null" ]]; then
-    echo "$waf_acls" | jq -r ".[] | select(.Tags[?Key==\"repository\"].Value == \"$REPOSITORY_TAG\" and .Tags[?Key==\"terratest\"].Value == \"$TERRATEST_TAG\") | .Id" | while read -r acl_id; do
-        if [[ -n "$acl_id" ]]; then
-            acl_arn=$(echo "$waf_acls" | jq -r ".[] | select(.Id == \"$acl_id\") | .ARN")
-            log_info "Eliminando WAF Web ACL: $acl_id"
-            aws wafv2 delete-web-acl --id "$acl_id" --name "$(echo "$waf_acls" | jq -r ".[] | select(.Id == \"$acl_id\") | .Name")" --scope REGIONAL --region "$REGION" 2>/dev/null || log_warn "No se pudo eliminar Web ACL: $acl_id"
+    # Iterar sobre cada ACL y verificar sus tags
+    echo "$waf_acls" | jq -r ".[].ARN" | while read -r acl_arn; do
+        if [[ -n "$acl_arn" ]]; then
+            # Obtener tags para este ACL
+            acl_tags=$(aws wafv2 list-tags-for-resource --resource-arn "$acl_arn" --region "$REGION" --output json 2>/dev/null || echo '{"TagInfoForResource":{"TagList":[]}}')
+            
+            # Verificar si tiene los tags de terratest
+            has_terratest=$(echo "$acl_tags" | jq -r '.TagInfoForResource.TagList[] | select(.Key == "terratest" and .Value == "'"$TERRATEST_TAG"'") | .Key' 2>/dev/null | head -1)
+            has_repository=$(echo "$acl_tags" | jq -r '.TagInfoForResource.TagList[] | select(.Key == "repository" and .Value == "'"$REPOSITORY_TAG"'") | .Key' 2>/dev/null | head -1)
+            
+            if [[ -n "$has_terratest" && -n "$has_repository" ]]; then
+                acl_id=$(echo "$waf_acls" | jq -r ".[] | select(.ARN == \"$acl_arn\") | .Id")
+                acl_name=$(echo "$waf_acls" | jq -r ".[] | select(.ARN == \"$acl_arn\") | .Name")
+                acl_lock_token=$(echo "$waf_acls" | jq -r ".[] | select(.ARN == \"$acl_arn\") | .LockToken")
+                log_info "Eliminando WAF Web ACL: $acl_name ($acl_id)"
+                aws wafv2 delete-web-acl --id "$acl_id" --name "$acl_name" --scope REGIONAL --lock-token "$acl_lock_token" --region "$REGION" 2>/dev/null || log_warn "No se pudo eliminar Web ACL: $acl_id"
+            fi
         fi
     done
 fi
