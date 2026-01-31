@@ -12,15 +12,17 @@ variable "auto_detect_existing_stage" {
   description = <<-EOT
     Si es true, detecta automáticamente si el stage existe en AWS.
     
-    IMPORTANTE: Solo usar cuando el stage fue creado FUERA de este módulo.
-    Si el stage fue creado por este módulo, mantener en false.
+    Por defecto está habilitado para evitar conflictos si el stage ya existe.
     
     Cuando está habilitado:
     - Si el stage existe: solo crea el deployment y actualiza el stage via AWS CLI
-    - Si el stage no existe: crea tanto el deployment como el stage
+    - Si el stage no existe: crea tanto el deployment como el stage via AWS CLI
+    
+    Configurar en false solo si quieres que Terraform gestione el stage directamente
+    (útil para la primera vez que se crea el módulo en un ambiente limpio).
   EOT
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "stage_name" {

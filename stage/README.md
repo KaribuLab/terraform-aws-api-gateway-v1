@@ -296,12 +296,14 @@ module "stage_prod" {
 
 ## Detección Automática de Stage Existente
 
-Por defecto, el módulo detecta automáticamente si el stage ya existe en AWS:
+**Por defecto**, el módulo detecta automáticamente si el stage ya existe en AWS (`auto_detect_existing_stage = true`):
 
-- **Si el stage existe**: Solo crea el deployment y actualiza el stage existente para usar el nuevo deployment
-- **Si el stage NO existe**: Crea tanto el deployment como el stage (comportamiento tradicional)
+- **Si el stage existe**: Solo crea el deployment y actualiza el stage existente para usar el nuevo deployment via AWS CLI
+- **Si el stage NO existe**: Crea tanto el deployment como el stage via AWS CLI
 
-Para deshabilitar la detección automática y forzar la creación del stage:
+Este comportamiento evita conflictos si el stage ya existe y hace que el módulo sea más robusto.
+
+Para deshabilitar la detección automática y que Terraform gestione el stage directamente:
 
 ```hcl
 module "stage_dev" {
@@ -310,7 +312,7 @@ module "stage_dev" {
   rest_api_id              = module.api_gateway.rest_api_id
   stage_name               = "dev"
   aws_region               = "us-east-1"
-  auto_detect_existing_stage = false  # Forzar creación del stage
+  auto_detect_existing_stage = false  # Terraform gestiona el stage directamente
   
   deployment_triggers = {
     redeployment = sha1(jsonencode([...]))
@@ -318,10 +320,12 @@ module "stage_dev" {
 }
 ```
 
-**Nota importante**: Si el stage ya existe y se detecta automáticamente:
-- El stage no estará en el state de Terraform (solo se actualiza via AWS CLI)
-- Los `method_settings` no se aplicarán (solo funcionan si el stage es creado por Terraform)
-- Los outputs relacionados con el stage (`stage_id`, `stage_arn`, `invoke_url`, `execution_arn`) serán `null`
+**Nota importante**: Cuando `auto_detect_existing_stage = true` (por defecto):
+- El stage se crea/actualiza via AWS CLI (no está completamente gestionado por Terraform)
+- Los `method_settings` no se aplicarán (solo funcionan si el stage es creado por Terraform con `auto_detect_existing_stage = false`)
+- Los outputs relacionados con el stage (`stage_id`, `stage_arn`, `invoke_url`, `execution_arn`) pueden ser `null` o limitados
+
+Si necesitas usar `method_settings` o necesitas que Terraform gestione completamente el stage, configura `auto_detect_existing_stage = false`.
 
 ## Variables
 
@@ -333,7 +337,7 @@ module "stage_dev" {
 
 ### Opcionales
 
-- `auto_detect_existing_stage`: Detectar automáticamente si el stage existe - Default: `true`
+- `auto_detect_existing_stage`: Detectar automáticamente si el stage existe (por defecto habilitado para evitar conflictos) - Default: `true`
 - `stage_description`: Descripción del stage - Default: `null`
 - `deployment_description`: Descripción del deployment - Default: `"Managed by Terraform"`
 - `deployment_triggers`: Map de triggers para forzar nuevo deployment - Default: `{}`
@@ -385,7 +389,7 @@ Para usar la detección automática de stages existentes, necesitas:
 
 ## Notas importantes
 
-- **Detección automática**: Por defecto, el módulo detecta si el stage existe antes de crearlo. Si existe, solo crea el deployment y actualiza el stage existente
+- **Detección automática**: Por defecto (`auto_detect_existing_stage = true`), el módulo detecta si el stage existe antes de crearlo. Si existe, solo crea el deployment y actualiza el stage existente via AWS CLI. Si no existe, crea el stage también via AWS CLI
 - **Nuevos deployments**: Cuando cambias `deployment_triggers`, Terraform crea un nuevo deployment y actualiza el stage para apuntar a él
 - **Deployments antiguos**: Los deployments anteriores no se eliminan automáticamente (mantiene historial)
 - **Múltiples stages**: Puedes tener múltiples stages (dev, staging, prod) apuntando al mismo API

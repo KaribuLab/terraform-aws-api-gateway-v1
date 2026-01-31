@@ -73,14 +73,12 @@ resource "aws_api_gateway_stage" "existing" {
 # Restaurar el deployment inicial antes de destruir el módulo
 # Esto evita el error "Active stages pointing to this deployment"
 # Nota: Este null_resource se ejecuta durante destroy para restaurar el deployment inicial
-# Depende del deployment del módulo para que se ejecute antes durante destroy
+# Obtiene el deployment_id inicial del stage directamente via AWS CLI para evitar ciclos
 resource "null_resource" "restore_initial_deployment" {
   triggers = {
-    rest_api_id        = module.api_gateway.rest_api_id
-    stage_name         = var.stage_name
-    initial_deployment = aws_api_gateway_deployment.initial.id
-    module_deployment  = module.stage_test.deployment_id
-    aws_region         = var.aws_region
+    rest_api_id = module.api_gateway.rest_api_id
+    stage_name  = var.stage_name
+    aws_region   = var.aws_region
   }
 
   # Restaurar el deployment inicial antes de destruir
@@ -89,25 +87,42 @@ resource "null_resource" "restore_initial_deployment" {
     command = <<-EOT
       REST_API_ID="${self.triggers.rest_api_id}"
       STAGE_NAME="${self.triggers.stage_name}"
-      DEPLOYMENT_ID="${self.triggers.initial_deployment}"
       REGION="${self.triggers.aws_region}"
       
-      # Restaurar el deployment inicial si el stage todavía existe
+      # Obtener el deployment_id inicial del stage (almacenado en variables del stage o tags)
+      # Por ahora, simplemente intentamos restaurar cualquier deployment anterior
+      # que no sea el del módulo
       if aws apigateway get-stage \
           --rest-api-id "$REST_API_ID" \
           --stage-name "$STAGE_NAME" \
           --region "$REGION" >/dev/null 2>&1; then
-        echo "Restaurando deployment inicial '$DEPLOYMENT_ID' en stage '$STAGE_NAME'..."
-        aws apigateway update-stage \
+        # Obtener todos los deployments y usar el más antiguo que no sea el actual
+        CURRENT_DEPLOYMENT=$(aws apigateway get-stage \
           --rest-api-id "$REST_API_ID" \
           --stage-name "$STAGE_NAME" \
-          --patch-operations "op=replace,path=/deploymentId,value=$DEPLOYMENT_ID" \
-          --region "$REGION" >/dev/null 2>&1 || true
+          --region "$REGION" \
+          --query 'deploymentId' --output text)
+        
+        # Obtener el deployment inicial (el primero creado, asumiendo que es el más antiguo)
+        INITIAL_DEPLOYMENT=$(aws apigateway get-deployments \
+          --rest-api-id "$REST_API_ID" \
+          --region "$REGION" \
+          --query 'items | sort_by(@, &createdDate) | [0].id' --output text)
+        
+        # Si el deployment actual no es el inicial, restaurar el inicial
+        if [ "$CURRENT_DEPLOYMENT" != "$INITIAL_DEPLOYMENT" ] && [ -n "$INITIAL_DEPLOYMENT" ]; then
+          echo "Restaurando deployment inicial '$INITIAL_DEPLOYMENT' en stage '$STAGE_NAME'..."
+          aws apigateway update-stage \
+            --rest-api-id "$REST_API_ID" \
+            --stage-name "$STAGE_NAME" \
+            --patch-operations "op=replace,path=/deploymentId,value=$INITIAL_DEPLOYMENT" \
+            --region "$REGION" >/dev/null 2>&1 || true
+        fi
       fi
     EOT
   }
-
-  # Depender del deployment del módulo para que se ejecute antes durante destroy
+  
+  # Depender del módulo para que se ejecute antes durante destroy
   depends_on = [module.stage_test]
 }
 
