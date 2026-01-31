@@ -22,6 +22,17 @@ locals {
   
   # ID de la API Key a usar (creada o existente)
   api_key_id = local.create_api_key ? aws_api_gateway_api_key.this[0].id : var.api_key_id
+  
+  # Validación: usage_plan_config es requerido si se usa API Key
+  api_key_requires_usage_plan = (var.api_key_config != null || var.api_key_id != null) && var.usage_plan_config == null
+}
+
+# Validación: usage_plan_config es requerido cuando se configura api_key_config o api_key_id
+check "api_key_requires_usage_plan" {
+  assert {
+    condition     = !local.api_key_requires_usage_plan
+    error_message = "usage_plan_config es requerido cuando se configura api_key_config o api_key_id"
+  }
 }
 
 # Crear deployment

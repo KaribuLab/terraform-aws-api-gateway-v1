@@ -16,6 +16,7 @@ func TestStageModule(t *testing.T) {
 
 	region := helpers.GetAWSRegion()
 	testName := helpers.GenerateTestName("test-stage-module")
+	stageName := testName + "-stage"
 	commonTags := helpers.GetCommonTags()
 
 	terraformOptions := helpers.TerraformOptionsWithVars(
@@ -23,7 +24,7 @@ func TestStageModule(t *testing.T) {
 		region,
 		map[string]interface{}{
 			"api_name":   testName,
-			"stage_name": "test",
+			"stage_name": stageName,
 			"tags":       commonTags,
 		},
 	)
@@ -37,23 +38,23 @@ func TestStageModule(t *testing.T) {
 
 	// Validar outputs del módulo stage
 	deploymentID := terraform.Output(t, terraformOptions, "deployment_id")
-	stageName := terraform.Output(t, terraformOptions, "stage_name")
+	outputStageName := terraform.Output(t, terraformOptions, "stage_name")
 	stageARN := terraform.Output(t, terraformOptions, "stage_arn")
 	invokeURL := terraform.Output(t, terraformOptions, "invoke_url")
 	executionARN := terraform.Output(t, terraformOptions, "execution_arn")
 
 	assert.NotEmpty(t, deploymentID, "deployment_id should not be empty")
-	assert.Equal(t, "test", stageName, "stage_name should be 'test'")
+	assert.Equal(t, stageName, outputStageName, "stage_name should match")
 	assert.NotEmpty(t, stageARN, "stage_arn should not be empty")
 	assert.NotEmpty(t, invokeURL, "invoke_url should not be empty")
 	assert.NotEmpty(t, executionARN, "execution_arn should not be empty")
 	assert.Contains(t, invokeURL, restAPIID, "invoke_url should contain rest_api_id")
-	assert.Contains(t, invokeURL, stageName, "invoke_url should contain stage_name")
+	assert.Contains(t, invokeURL, outputStageName, "invoke_url should contain stage_name")
 	assert.Contains(t, executionARN, restAPIID, "execution_arn should contain rest_api_id")
-	assert.Contains(t, executionARN, stageName, "execution_arn should contain stage_name")
+	assert.Contains(t, executionARN, outputStageName, "execution_arn should contain stage_name")
 
 	require.NotNil(t, deploymentID)
-	require.NotNil(t, stageName)
+	require.NotNil(t, outputStageName)
 	require.NotNil(t, stageARN)
 	require.NotNil(t, invokeURL)
 	require.NotNil(t, executionARN)
@@ -71,6 +72,7 @@ func TestStageModuleWithCacheAndThrottling(t *testing.T) {
 
 	region := helpers.GetAWSRegion()
 	testName := helpers.GenerateTestName("test-stage-module-cache")
+	stageName := testName + "-stage"
 	commonTags := helpers.GetCommonTags()
 
 	terraformOptions := helpers.TerraformOptionsWithVars(
@@ -78,7 +80,7 @@ func TestStageModuleWithCacheAndThrottling(t *testing.T) {
 		region,
 		map[string]interface{}{
 			"api_name":              testName,
-			"stage_name":            "test",
+			"stage_name":            stageName,
 			"cache_cluster_enabled": true,
 			"cache_cluster_size":    "0.5",
 			"method_settings": map[string]interface{}{
@@ -97,13 +99,13 @@ func TestStageModuleWithCacheAndThrottling(t *testing.T) {
 	terraform.InitAndApply(t, terraformOptions)
 
 	// Validar que el stage se creó correctamente
-	stageName := terraform.Output(t, terraformOptions, "stage_name")
-	assert.Equal(t, "test", stageName, "stage_name should be 'test'")
+	outputStageName := terraform.Output(t, terraformOptions, "stage_name")
+	assert.Equal(t, stageName, outputStageName, "stage_name should match")
 
 	invokeURL := terraform.Output(t, terraformOptions, "invoke_url")
 	assert.NotEmpty(t, invokeURL, "invoke_url should not be empty")
 
-	require.NotNil(t, stageName)
+	require.NotNil(t, outputStageName)
 	require.NotNil(t, invokeURL)
 }
 
@@ -112,6 +114,7 @@ func TestStageModuleWithAPIKey(t *testing.T) {
 
 	region := helpers.GetAWSRegion()
 	testName := helpers.GenerateTestName("test-stage-apikey")
+	stageName := testName + "-stage"
 	commonTags := helpers.GetCommonTags()
 
 	terraformOptions := helpers.TerraformOptionsWithVars(
@@ -119,7 +122,7 @@ func TestStageModuleWithAPIKey(t *testing.T) {
 		region,
 		map[string]interface{}{
 			"api_name":        testName,
-			"stage_name":      "test",
+			"stage_name":      stageName,
 			"api_key_name":    testName + "-key",
 			"usage_plan_name": testName + "-plan",
 			"tags":            commonTags,
@@ -135,12 +138,12 @@ func TestStageModuleWithAPIKey(t *testing.T) {
 
 	// Validar outputs del módulo stage
 	deploymentID := terraform.Output(t, terraformOptions, "deployment_id")
-	stageName := terraform.Output(t, terraformOptions, "stage_name")
+	outputStageName := terraform.Output(t, terraformOptions, "stage_name")
 	stageARN := terraform.Output(t, terraformOptions, "stage_arn")
 	invokeURL := terraform.Output(t, terraformOptions, "invoke_url")
 
 	assert.NotEmpty(t, deploymentID, "deployment_id should not be empty")
-	assert.Equal(t, "test", stageName, "stage_name should be 'test'")
+	assert.Equal(t, stageName, outputStageName, "stage_name should match")
 	assert.NotEmpty(t, stageARN, "stage_arn should not be empty")
 	assert.NotEmpty(t, invokeURL, "invoke_url should not be empty")
 

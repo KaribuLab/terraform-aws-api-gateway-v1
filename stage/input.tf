@@ -126,9 +126,4 @@ variable "usage_plan_config" {
     }), null)
   })
   default = null
-  
-  validation {
-    condition     = var.api_key_config == null && var.api_key_id == null || var.usage_plan_config != null
-    error_message = "usage_plan_config es requerido cuando se configura api_key_config o api_key_id"
-  }
 }
