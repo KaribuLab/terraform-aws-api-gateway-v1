@@ -75,7 +75,10 @@ resource "aws_api_gateway_integration_response" "this" {
   response_parameters = each.value.response_parameters
   response_templates  = each.value.response_templates
 
-  depends_on = [aws_api_gateway_integration.this]
+  depends_on = [
+    aws_api_gateway_integration.this,
+    aws_api_gateway_method_response.this
+  ]
 }
 
 # ============================================================================
@@ -134,5 +137,8 @@ resource "aws_api_gateway_integration_response" "options" {
     "method.response.header.Access-Control-Allow-Origin"  = var.cors_allow_origin
   }
 
-  depends_on = [aws_api_gateway_integration.options]
+  depends_on = [
+    aws_api_gateway_integration.options,
+    aws_api_gateway_method_response.options
+  ]
 }
