@@ -10,6 +10,9 @@ data "external" "check_stage" {
 }
 
 locals {
+  # Determinar si el stage existe (solo cuando auto_detect_existing_stage = true)
+  # Nota: data.external se ejecuta durante apply, no durante plan
+  # Por lo tanto, durante plan, este valor será desconocido cuando auto_detect_existing_stage = true
   stage_exists = var.auto_detect_existing_stage ? (
     try(data.external.check_stage[0].result.exists, "false") == "true"
   ) : false
@@ -25,6 +28,7 @@ locals {
   
   # Validación: usage_plan_config es requerido si se usa API Key
   api_key_requires_usage_plan = (var.api_key_config != null || var.api_key_id != null) && var.usage_plan_config == null
+  
 }
 
 # Validación: usage_plan_config es requerido cuando se configura api_key_config o api_key_id
@@ -51,9 +55,12 @@ resource "aws_api_gateway_deployment" "this" {
   }
 }
 
-# Crear stage solo si NO existe
+# Crear stage solo si NO estamos en modo auto_detect
+# Cuando auto_detect_existing_stage = true, NO creamos el stage (count = 0)
+# El script update_stage.sh manejará la creación/actualización del stage
+# Cuando auto_detect_existing_stage = false, siempre creamos el stage (count = 1)
 resource "aws_api_gateway_stage" "this" {
-  count = local.stage_exists ? 0 : 1
+  count = var.auto_detect_existing_stage ? 0 : 1
 
   rest_api_id   = var.rest_api_id
   deployment_id = aws_api_gateway_deployment.this.id
@@ -82,13 +89,11 @@ resource "aws_api_gateway_stage" "this" {
   tags = var.tags
 }
 
-# Actualizar stage existente con nuevo deployment
-# Solo se ejecuta si:
-# 1. auto_detect_existing_stage = true
-# 2. El stage existe en AWS (detectado por check_stage.sh)
-# 3. El stage NO está siendo gestionado por este módulo (length = 0)
+# Crear o actualizar stage usando script
+# Solo se ejecuta cuando auto_detect_existing_stage = true
+# El script maneja tanto la creación como la actualización del stage
 resource "null_resource" "update_existing_stage" {
-  count = local.stage_exists ? 1 : 0
+  count = var.auto_detect_existing_stage ? 1 : 0
 
   triggers = {
     deployment_id = aws_api_gateway_deployment.this.id
@@ -98,17 +103,17 @@ resource "null_resource" "update_existing_stage" {
     command = "${path.module}/scripts/update_stage.sh ${var.rest_api_id} ${var.stage_name} ${aws_api_gateway_deployment.this.id} ${var.aws_region}"
   }
 
-  # Esperar a que cualquier operación del stage termine antes de ejecutar
-  depends_on = [aws_api_gateway_stage.this]
+  # Esperar a que el deployment esté creado antes de ejecutar
+  depends_on = [aws_api_gateway_deployment.this]
 }
 
 # Method settings (cache, throttling por método)
-# Solo se crean si el stage fue creado por este módulo (no si ya existía)
+# Solo se crean si el stage fue creado por este módulo (no cuando auto_detect_existing_stage = true)
 resource "aws_api_gateway_method_settings" "this" {
-  for_each = local.stage_exists ? {} : var.method_settings
+  for_each = var.auto_detect_existing_stage ? {} : var.method_settings
 
   rest_api_id = var.rest_api_id
-  stage_name  = aws_api_gateway_stage.this[0].stage_name
+  stage_name  = try(aws_api_gateway_stage.this[0].stage_name, var.stage_name)
   method_path = each.key
 
   settings {

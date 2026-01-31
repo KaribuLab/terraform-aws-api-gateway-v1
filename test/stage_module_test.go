@@ -160,3 +160,42 @@ func TestStageModuleWithAPIKey(t *testing.T) {
 	require.NotNil(t, apiKeyValue)
 	require.NotNil(t, usagePlanID)
 }
+
+func TestStageModuleWithExistingStage(t *testing.T) {
+	t.Parallel()
+
+	region := helpers.GetAWSRegion()
+	testName := helpers.GenerateTestName("test-stage-existing")
+	stageName := testName + "-stage"
+	commonTags := helpers.GetCommonTags()
+
+	terraformOptions := helpers.TerraformOptionsWithVars(
+		"fixtures/stage_existing",
+		region,
+		map[string]interface{}{
+			"api_name":   testName,
+			"stage_name": stageName,
+			"tags":       commonTags,
+		},
+	)
+
+	defer terraform.Destroy(t, terraformOptions)
+	terraform.InitAndApply(t, terraformOptions)
+
+	// Validar que el stage existía
+	stageExists := terraform.Output(t, terraformOptions, "stage_exists")
+	assert.Equal(t, "true", stageExists, "stage_exists should be true")
+
+	// Validar que se creó un nuevo deployment
+	initialDeploymentID := terraform.Output(t, terraformOptions, "initial_deployment_id")
+	moduleDeploymentID := terraform.Output(t, terraformOptions, "module_deployment_id")
+
+	assert.NotEmpty(t, initialDeploymentID, "initial_deployment_id should not be empty")
+	assert.NotEmpty(t, moduleDeploymentID, "module_deployment_id should not be empty")
+	assert.NotEqual(t, initialDeploymentID, moduleDeploymentID,
+		"module should create a new deployment")
+
+	require.NotNil(t, stageExists)
+	require.NotNil(t, initialDeploymentID)
+	require.NotNil(t, moduleDeploymentID)
+}

@@ -10,7 +10,7 @@ output "stage_exists" {
 
 output "stage_id" {
   description = "ID del stage (solo disponible si fue creado por este módulo)"
-  value       = local.stage_exists ? null : aws_api_gateway_stage.this[0].id
+  value       = local.stage_exists ? null : try(aws_api_gateway_stage.this[0].id, null)
 }
 
 output "stage_name" {
@@ -20,17 +20,17 @@ output "stage_name" {
 
 output "stage_arn" {
   description = "ARN del stage (solo disponible si fue creado por este módulo)"
-  value       = local.stage_exists ? null : aws_api_gateway_stage.this[0].arn
+  value       = local.stage_exists ? null : try(aws_api_gateway_stage.this[0].arn, null)
 }
 
 output "invoke_url" {
   description = "URL de invocación del stage (solo disponible si fue creado por este módulo)"
-  value       = local.stage_exists ? null : aws_api_gateway_stage.this[0].invoke_url
+  value       = local.stage_exists ? null : try(aws_api_gateway_stage.this[0].invoke_url, null)
 }
 
 output "execution_arn" {
   description = "ARN de ejecución del stage para permisos Lambda (solo disponible si fue creado por este módulo)"
-  value       = local.stage_exists ? null : aws_api_gateway_stage.this[0].execution_arn
+  value       = local.stage_exists ? null : try(aws_api_gateway_stage.this[0].execution_arn, null)
 }
 
 # ============================================================================
