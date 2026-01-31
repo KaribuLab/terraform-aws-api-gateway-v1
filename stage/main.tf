@@ -1,3 +1,29 @@
+# Detectar si el stage existe
+data "external" "check_stage" {
+  count   = var.auto_detect_existing_stage ? 1 : 0
+  program = ["bash", "${path.module}/scripts/check_stage.sh"]
+  query = {
+    rest_api_id = var.rest_api_id
+    stage_name  = var.stage_name
+    region      = var.aws_region
+  }
+}
+
+locals {
+  stage_exists = var.auto_detect_existing_stage ? (
+    try(data.external.check_stage[0].result.exists, "false") == "true"
+  ) : false
+  
+  # Determinar si se debe crear API Key
+  create_api_key = var.api_key_config != null && var.api_key_id == null
+  
+  # Determinar si se debe crear Usage Plan
+  create_usage_plan = var.usage_plan_config != null && (var.api_key_id != null || var.api_key_config != null)
+  
+  # ID de la API Key a usar (creada o existente)
+  api_key_id = local.create_api_key ? aws_api_gateway_api_key.this[0].id : var.api_key_id
+}
+
 # Crear deployment
 # Usamos create_before_destroy = true para permitir actualizaciones sin downtime.
 # El nuevo deployment se crea primero, luego el stage se actualiza para apuntar
@@ -14,8 +40,10 @@ resource "aws_api_gateway_deployment" "this" {
   }
 }
 
-# Crear o actualizar stage
+# Crear stage solo si NO existe
 resource "aws_api_gateway_stage" "this" {
+  count = local.stage_exists ? 0 : 1
+
   rest_api_id   = var.rest_api_id
   deployment_id = aws_api_gateway_deployment.this.id
   stage_name    = var.stage_name
@@ -43,12 +71,26 @@ resource "aws_api_gateway_stage" "this" {
   tags = var.tags
 }
 
+# Actualizar stage existente con nuevo deployment
+resource "null_resource" "update_existing_stage" {
+  count = local.stage_exists ? 1 : 0
+
+  triggers = {
+    deployment_id = aws_api_gateway_deployment.this.id
+  }
+
+  provisioner "local-exec" {
+    command = "${path.module}/scripts/update_stage.sh ${var.rest_api_id} ${var.stage_name} ${aws_api_gateway_deployment.this.id} ${var.aws_region}"
+  }
+}
+
 # Method settings (cache, throttling por método)
+# Solo se crean si el stage fue creado por este módulo (no si ya existía)
 resource "aws_api_gateway_method_settings" "this" {
-  for_each = var.method_settings
+  for_each = local.stage_exists ? {} : var.method_settings
 
   rest_api_id = var.rest_api_id
-  stage_name  = aws_api_gateway_stage.this.stage_name
+  stage_name  = aws_api_gateway_stage.this[0].stage_name
   method_path = each.key
 
   settings {
@@ -61,4 +103,65 @@ resource "aws_api_gateway_method_settings" "this" {
     cache_ttl_in_seconds   = try(each.value.cache_ttl_in_seconds, 300)
     cache_data_encrypted   = try(each.value.cache_data_encrypted, false)
   }
+}
+
+# ============================================================================
+# API Key y Usage Plan
+# ============================================================================
+
+# Crear API Key si se configura
+resource "aws_api_gateway_api_key" "this" {
+  count = local.create_api_key ? 1 : 0
+
+  name        = var.api_key_config.name
+  description = var.api_key_config.description
+  enabled     = var.api_key_config.enabled
+  tags        = var.tags
+}
+
+# Crear Usage Plan
+resource "aws_api_gateway_usage_plan" "this" {
+  count = local.create_usage_plan ? 1 : 0
+
+  name        = var.usage_plan_config.name
+  description = var.usage_plan_config.description
+
+  dynamic "quota_settings" {
+    for_each = var.usage_plan_config.quota_settings != null ? [1] : []
+    content {
+      limit  = var.usage_plan_config.quota_settings.limit
+      period = var.usage_plan_config.quota_settings.period
+    }
+  }
+
+  dynamic "throttle_settings" {
+    for_each = var.usage_plan_config.throttle_settings != null ? [1] : []
+    content {
+      burst_limit = var.usage_plan_config.throttle_settings.burst_limit
+      rate_limit  = var.usage_plan_config.throttle_settings.rate_limit
+    }
+  }
+
+  # Asociar el stage al Usage Plan
+  api_stages {
+    api_id = var.rest_api_id
+    stage  = var.stage_name
+  }
+
+  tags = var.tags
+
+  # Depende del stage (creado o actualizado)
+  depends_on = [
+    aws_api_gateway_stage.this,
+    null_resource.update_existing_stage
+  ]
+}
+
+# Asociar API Key al Usage Plan
+resource "aws_api_gateway_usage_plan_key" "this" {
+  count = local.create_usage_plan ? 1 : 0
+
+  key_id        = local.api_key_id
+  key_type      = "API_KEY"
+  usage_plan_id = aws_api_gateway_usage_plan.this[0].id
 }

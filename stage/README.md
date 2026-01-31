@@ -5,6 +5,8 @@ Este submódulo facilita la creación y gestión de stages y deployments de API 
 ## Características
 
 - Creación de deployment y stage
+- **Detección automática de stages existentes**: Si el stage ya existe en AWS, solo crea el deployment y actualiza el stage existente
+- **Soporte para API Keys**: Crear API Keys y Usage Plans asociados al stage
 - Configuración de cache cluster a nivel de stage
 - Throttling y cache por método (usando `method_settings`)
 - AWS X-Ray tracing
@@ -50,6 +52,7 @@ module "stage_dev" {
   
   rest_api_id = module.api_gateway.rest_api_id
   stage_name  = "dev"
+  aws_region  = "us-east-1"
   
   # Triggers para crear nuevo deployment cuando cambien recursos
   deployment_triggers = {
@@ -182,6 +185,89 @@ module "stage_dev" {
 }
 ```
 
+## Con API Key
+
+### Crear nueva API Key
+
+```hcl
+module "stage_prod" {
+  source = "./terraform-aws-api-gateway-v1/stage"
+  
+  rest_api_id = module.api_gateway.rest_api_id
+  stage_name  = "prod"
+  aws_region  = "us-east-1"
+  
+  # Crear API Key nueva
+  api_key_config = {
+    name        = "my-api-key"
+    description = "API Key para producción"
+  }
+  
+  # Configurar Usage Plan (requerido)
+  usage_plan_config = {
+    name = "prod-usage-plan"
+    throttle_settings = {
+      burst_limit = 100
+      rate_limit  = 50
+    }
+  }
+  
+  deployment_triggers = {
+    redeployment = sha1(jsonencode([...]))
+  }
+}
+
+# Obtener el valor de la API Key
+output "api_key" {
+  value     = module.stage_prod.api_key_value
+  sensitive = true
+}
+```
+
+### Usar API Key existente
+
+```hcl
+module "stage_prod" {
+  source = "./terraform-aws-api-gateway-v1/stage"
+  
+  rest_api_id = module.api_gateway.rest_api_id
+  stage_name  = "prod"
+  aws_region  = "us-east-1"
+  
+  # Usar API Key existente del módulo principal
+  api_key_id = module.api_gateway.api_key_id
+  
+  # Configurar Usage Plan (requerido)
+  usage_plan_config = {
+    name = "prod-usage-plan"
+    quota_settings = {
+      limit  = 10000
+      period = "DAY"
+    }
+    throttle_settings = {
+      burst_limit = 200
+      rate_limit  = 100
+    }
+  }
+  
+  deployment_triggers = {
+    redeployment = sha1(jsonencode([...]))
+  }
+}
+```
+
+**Importante**: Para que la API Key funcione, también debes configurar `api_key_required = true` en tus métodos:
+
+```hcl
+resource "aws_api_gateway_method" "users_get" {
+  rest_api_id   = module.api_gateway.rest_api_id
+  resource_id   = aws_api_gateway_resource.users.id
+  http_method   = "GET"
+  authorization = "NONE"
+  api_key_required = true  # Requerir API Key
+}
+```
+
 ## Múltiples stages
 
 Puedes crear múltiples stages para el mismo API:
@@ -208,15 +294,46 @@ module "stage_prod" {
 }
 ```
 
+## Detección Automática de Stage Existente
+
+Por defecto, el módulo detecta automáticamente si el stage ya existe en AWS:
+
+- **Si el stage existe**: Solo crea el deployment y actualiza el stage existente para usar el nuevo deployment
+- **Si el stage NO existe**: Crea tanto el deployment como el stage (comportamiento tradicional)
+
+Para deshabilitar la detección automática y forzar la creación del stage:
+
+```hcl
+module "stage_dev" {
+  source = "./terraform-aws-api-gateway-v1/stage"
+  
+  rest_api_id              = module.api_gateway.rest_api_id
+  stage_name               = "dev"
+  aws_region               = "us-east-1"
+  auto_detect_existing_stage = false  # Forzar creación del stage
+  
+  deployment_triggers = {
+    redeployment = sha1(jsonencode([...]))
+  }
+}
+```
+
+**Nota importante**: Si el stage ya existe y se detecta automáticamente:
+- El stage no estará en el state de Terraform (solo se actualiza via AWS CLI)
+- Los `method_settings` no se aplicarán (solo funcionan si el stage es creado por Terraform)
+- Los outputs relacionados con el stage (`stage_id`, `stage_arn`, `invoke_url`, `execution_arn`) serán `null`
+
 ## Variables
 
 ### Requeridas
 
 - `rest_api_id`: ID del REST API de API Gateway
 - `stage_name`: Nombre del stage (ej: 'dev', 'staging', 'prod')
+- `aws_region`: Región de AWS para la verificación del stage
 
 ### Opcionales
 
+- `auto_detect_existing_stage`: Detectar automáticamente si el stage existe - Default: `true`
 - `stage_description`: Descripción del stage - Default: `null`
 - `deployment_description`: Descripción del deployment - Default: `"Managed by Terraform"`
 - `deployment_triggers`: Map de triggers para forzar nuevo deployment - Default: `{}`
@@ -226,6 +343,9 @@ module "stage_prod" {
 - `xray_tracing_enabled`: Habilitar AWS X-Ray tracing - Default: `false`
 - `access_log_settings`: Configuración de access logs - Default: `null`
 - `method_settings`: Configuración de settings por método (cache, throttling, logs) - Default: `{}`
+- `api_key_id`: ID de una API Key existente para asociar al Usage Plan - Default: `null`
+- `api_key_config`: Configuración para crear una nueva API Key - Default: `null`
+- `usage_plan_config`: Configuración del Usage Plan (requerido si se usa API Key) - Default: `null`
 - `tags`: Tags para los recursos - Default: `{}`
 
 ### method_settings
@@ -245,17 +365,32 @@ El formato de `method_settings` es un map donde:
 ## Outputs
 
 - `deployment_id`: ID del deployment creado
-- `deployment_invoke_url`: URL de invocación del deployment
-- `stage_id`: ID del stage
+- `stage_exists`: Indica si el stage ya existía (no fue creado por este módulo)
+- `stage_id`: ID del stage (solo disponible si fue creado por este módulo, `null` si ya existía)
 - `stage_name`: Nombre del stage
-- `stage_arn`: ARN del stage
-- `invoke_url`: URL de invocación del stage
-- `execution_arn`: ARN de ejecución del stage (para permisos Lambda)
+- `stage_arn`: ARN del stage (solo disponible si fue creado por este módulo, `null` si ya existía)
+- `invoke_url`: URL de invocación del stage (solo disponible si fue creado por este módulo, `null` si ya existía)
+- `execution_arn`: ARN de ejecución del stage para permisos Lambda (solo disponible si fue creado por este módulo, `null` si ya existía)
+- `api_key_id`: ID de la API Key (creada o proporcionada)
+- `api_key_value`: Valor de la API Key (solo si fue creada por este módulo, `null` si se usó una existente)
+- `usage_plan_id`: ID del Usage Plan
+
+## Requisitos Previos
+
+Para usar la detección automática de stages existentes, necesitas:
+
+- **AWS CLI** instalado y configurado con credenciales válidas
+- **jq** instalado (para parsear JSON en los scripts)
+- Permisos IAM: `apigateway:GetStage`, `apigateway:UpdateStage`
 
 ## Notas importantes
 
+- **Detección automática**: Por defecto, el módulo detecta si el stage existe antes de crearlo. Si existe, solo crea el deployment y actualiza el stage existente
 - **Nuevos deployments**: Cuando cambias `deployment_triggers`, Terraform crea un nuevo deployment y actualiza el stage para apuntar a él
 - **Deployments antiguos**: Los deployments anteriores no se eliminan automáticamente (mantiene historial)
 - **Múltiples stages**: Puedes tener múltiples stages (dev, staging, prod) apuntando al mismo API
-- **Throttling**: Se configura a nivel de stage usando `method_settings`, no a nivel de API
+- **Throttling**: Se configura a nivel de stage usando `method_settings`, no a nivel de API. Solo funciona si el stage es creado por Terraform
 - **Cache**: Puede estar habilitado a nivel de stage (cache cluster) y/o por método (usando `method_settings`)
+- **Stage existente**: Si el stage ya existe y se detecta automáticamente, los `method_settings` no se aplicarán y algunos outputs serán `null`
+- **API Keys**: El `usage_plan_config` es requerido si configuras `api_key_config` o `api_key_id`. El Usage Plan se asocia automáticamente al stage creado o existente
+- **API Key requerida**: Para que la API Key funcione, debes configurar `api_key_required = true` en tus métodos de API Gateway

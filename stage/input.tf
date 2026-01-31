@@ -3,6 +3,17 @@ variable "rest_api_id" {
   type        = string
 }
 
+variable "aws_region" {
+  description = "Región de AWS para la verificación del stage"
+  type        = string
+}
+
+variable "auto_detect_existing_stage" {
+  description = "Si es true, detecta automáticamente si el stage existe"
+  type        = bool
+  default     = true
+}
+
 variable "stage_name" {
   description = "Nombre del stage (ej: 'dev', 'staging', 'prod')"
   type        = string
@@ -78,4 +89,46 @@ variable "tags" {
   description = "Tags para los recursos"
   type        = map(string)
   default     = {}
+}
+
+# ============================================================================
+# Variables de API Key
+# ============================================================================
+
+variable "api_key_id" {
+  description = "ID de una API Key existente para asociar al Usage Plan. Si se define, no se crea una nueva API Key."
+  type        = string
+  default     = null
+}
+
+variable "api_key_config" {
+  description = "Configuración para crear una nueva API Key. Solo se usa si api_key_id es null."
+  type = object({
+    name        = string
+    description = optional(string, "API Key managed by Terraform")
+    enabled     = optional(bool, true)
+  })
+  default = null
+}
+
+variable "usage_plan_config" {
+  description = "Configuración del Usage Plan. Requerido si api_key_id o api_key_config está definido."
+  type = object({
+    name        = optional(string, "stage-usage-plan")
+    description = optional(string, "Usage plan managed by Terraform")
+    quota_settings = optional(object({
+      limit  = number
+      period = string # DAY, WEEK, MONTH
+    }), null)
+    throttle_settings = optional(object({
+      burst_limit = number
+      rate_limit  = number
+    }), null)
+  })
+  default = null
+  
+  validation {
+    condition     = var.api_key_config == null && var.api_key_id == null || var.usage_plan_config != null
+    error_message = "usage_plan_config es requerido cuando se configura api_key_config o api_key_id"
+  }
 }
