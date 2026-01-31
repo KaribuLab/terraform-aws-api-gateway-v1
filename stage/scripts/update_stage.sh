@@ -7,6 +7,17 @@ STAGE_NAME="${2:?Error: STAGE_NAME es requerido}"
 DEPLOYMENT_ID="${3:?Error: DEPLOYMENT_ID es requerido}"
 REGION="${4:?Error: REGION es requerido}"
 
+echo "Verificando si el stage '$STAGE_NAME' existe..."
+
+# Verificar si el stage existe antes de actualizarlo
+if ! aws apigateway get-stage \
+    --rest-api-id "$REST_API_ID" \
+    --stage-name "$STAGE_NAME" \
+    --region "$REGION" >/dev/null 2>&1; then
+  echo "Stage '$STAGE_NAME' no existe. Omitiendo actualización."
+  exit 0
+fi
+
 echo "Actualizando stage '$STAGE_NAME' con deployment '$DEPLOYMENT_ID'..."
 
 # Actualizar el deployment del stage

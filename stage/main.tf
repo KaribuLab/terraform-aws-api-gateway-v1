@@ -83,6 +83,10 @@ resource "aws_api_gateway_stage" "this" {
 }
 
 # Actualizar stage existente con nuevo deployment
+# Solo se ejecuta si:
+# 1. auto_detect_existing_stage = true
+# 2. El stage existe en AWS (detectado por check_stage.sh)
+# 3. El stage NO está siendo gestionado por este módulo (length = 0)
 resource "null_resource" "update_existing_stage" {
   count = local.stage_exists ? 1 : 0
 
@@ -93,6 +97,9 @@ resource "null_resource" "update_existing_stage" {
   provisioner "local-exec" {
     command = "${path.module}/scripts/update_stage.sh ${var.rest_api_id} ${var.stage_name} ${aws_api_gateway_deployment.this.id} ${var.aws_region}"
   }
+
+  # Esperar a que cualquier operación del stage termine antes de ejecutar
+  depends_on = [aws_api_gateway_stage.this]
 }
 
 # Method settings (cache, throttling por método)

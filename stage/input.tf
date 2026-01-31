@@ -9,9 +9,18 @@ variable "aws_region" {
 }
 
 variable "auto_detect_existing_stage" {
-  description = "Si es true, detecta automáticamente si el stage existe"
+  description = <<-EOT
+    Si es true, detecta automáticamente si el stage existe en AWS.
+    
+    IMPORTANTE: Solo usar cuando el stage fue creado FUERA de este módulo.
+    Si el stage fue creado por este módulo, mantener en false.
+    
+    Cuando está habilitado:
+    - Si el stage existe: solo crea el deployment y actualiza el stage via AWS CLI
+    - Si el stage no existe: crea tanto el deployment como el stage
+  EOT
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "stage_name" {
