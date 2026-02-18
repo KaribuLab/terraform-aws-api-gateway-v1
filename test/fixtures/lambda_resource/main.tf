@@ -15,16 +15,6 @@ provider "aws" {
   region = var.aws_region
 }
 
-# Crear el API Gateway principal
-module "api_gateway" {
-  source = "../../.."
-
-  aws_region      = var.aws_region
-  api_name        = var.api_name
-  api_description = var.api_description
-  tags            = var.tags
-}
-
 # Crear IAM role para Lambda
 resource "aws_iam_role" "lambda" {
   name = "${var.lambda_function_name}-role"
@@ -63,48 +53,34 @@ data "archive_file" "lambda_zip" {
   output_path = "${path.module}/lambda_function.zip"
 }
 
-# Crear el recurso /users usando el submódulo parent
-module "users_resource" {
-  source = "../../../resources/parent"
+# Crear el API Gateway con integraciones Lambda
+module "api_gateway" {
+  source = "../../.."
 
-  rest_api_id        = module.api_gateway.rest_api_id
-  parent_resource_id = module.api_gateway.rest_api_root_resource_id
-  path_part          = "users"
-}
+  aws_region      = var.aws_region
+  api_name        = var.api_name
+  api_description = var.api_description
+  stage_name      = "test"
+  tags            = var.tags
 
-# GET /users - usar el recurso compartido
-module "users_get" {
-  source = "../../../resources/lambda"
-
-  rest_api_id            = module.api_gateway.rest_api_id
-  resource_id            = module.users_resource.resource_id
-  create_resource        = false
-  rest_api_execution_arn = module.api_gateway.rest_api_execution_arn
-
-  http_method          = "GET"
-  lambda_function_name = aws_lambda_function.test.function_name
-  lambda_invoke_arn    = aws_lambda_function.test.invoke_arn
-
-  # Sin authorizer (básico)
-  authorization_type = "NONE"
-}
-
-# POST /users - usar el mismo recurso compartido
-module "users_post" {
-  source = "../../../resources/lambda"
-
-  rest_api_id            = module.api_gateway.rest_api_id
-  resource_id            = module.users_resource.resource_id
-  create_resource        = false
-  rest_api_execution_arn = module.api_gateway.rest_api_execution_arn
-
-  http_method          = "POST"
-  lambda_function_name = aws_lambda_function.test.function_name
-  lambda_invoke_arn    = aws_lambda_function.test.invoke_arn
-
-  # Con CORS habilitado
-  enable_cors       = true
-  cors_allow_origin = "'*'"
+  lambda_integrations = [
+    # GET /users
+    {
+      path                = "/users"
+      method              = "GET"
+      lambda_invoke_arn   = aws_lambda_function.test.invoke_arn
+      lambda_function_arn = aws_lambda_function.test.arn
+    },
+    # POST /users con CORS
+    {
+      path                = "/users"
+      method              = "POST"
+      lambda_invoke_arn   = aws_lambda_function.test.invoke_arn
+      lambda_function_arn = aws_lambda_function.test.arn
+      enable_cors         = true
+      cors_allow_origin   = "'*'"
+    }
+  ]
 }
 
 variable "aws_region" {

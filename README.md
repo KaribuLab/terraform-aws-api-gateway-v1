@@ -1,77 +1,25 @@
 # Terraform AWS API Gateway v1 Module
 
-Módulo de Terraform para crear y gestionar API Gateway REST API v1 en AWS con funcionalidades opcionales avanzadas.
+Módulo de Terraform para crear y gestionar API Gateway REST API v1 en AWS con integraciones Lambda declarativas.
 
 ## Características
 
-- **Funcionalidad básica**: Creación de API Gateway REST API
-- **Stage opcional**: El módulo puede crear el stage o dejarlo al usuario
-- **Autenticación opcional**: 
-  - API Key con Usage Plans (asociación automática si el módulo crea el stage)
-  - Lambda Authorizer con permisos automáticos
+- **Interfaz declarativa**: Define todos tus endpoints Lambda en una sola variable
+- **Gestión automática de recursos**: Crea automáticamente la jerarquía de paths necesaria
+- **Deployment y Stage integrados**: No necesitas gestionar deployments manualmente
+- **Lambda Authorizers**: Soporte completo para authorizers personalizados
+- **CORS automático**: Habilita CORS por endpoint con configuración simple
+- **API Key y Usage Plans**: Autenticación opcional con límites de uso
+- **Method Settings**: Configuración de cache, throttling y logs por método
 
 ## Requisitos
 
 - Terraform >= 1.0
 - AWS Provider >= 5.0
 - Credenciales AWS configuradas
-- Permisos IAM necesarios para crear recursos de API Gateway
+- Permisos IAM necesarios para crear recursos de API Gateway y Lambda
 
-## Dos Formas de Usar el Módulo
-
-### Opción 1: El usuario crea el stage (más flexible)
-
-```hcl
-module "api_gateway" {
-  source   = "github.com/KaribuLab/terraform-aws-api-gateway-v1"
-  api_name = "my-api"
-  # stage_config = null (por defecto)
-}
-
-# Usuario crea deployment y stage
-resource "aws_api_gateway_deployment" "this" {
-  rest_api_id = module.api_gateway.rest_api_id
-  # ... triggers ...
-}
-
-resource "aws_api_gateway_stage" "prod" {
-  deployment_id = aws_api_gateway_deployment.this.id
-  rest_api_id   = module.api_gateway.rest_api_id
-  stage_name    = "prod"
-}
-```
-
-### Opción 2: El módulo crea el stage (más simple)
-
-```hcl
-# Usuario crea deployment primero
-resource "aws_api_gateway_deployment" "this" {
-  rest_api_id = module.api_gateway.rest_api_id
-  # ... triggers ...
-}
-
-module "api_gateway" {
-  source        = "github.com/KaribuLab/terraform-aws-api-gateway-v1"
-  api_name      = "my-api"
-  deployment_id = aws_api_gateway_deployment.this.id
-  
-  stage_config = {
-    stage_name            = "prod"
-    cache_cluster_enabled = true
-    cache_cluster_size    = "0.5"
-  }
-  
-  # Usage Plan se asocia automáticamente al stage
-  enable_api_key = true
-  usage_plan_config = {
-    name = "prod-plan"
-  }
-}
-```
-
-## Ejemplos
-
-### Con API Key
+## Uso Básico
 
 ```hcl
 module "api_gateway" {
@@ -79,20 +27,41 @@ module "api_gateway" {
 
   aws_region = "us-east-1"
   api_name   = "my-api"
+  stage_name = "prod"
 
-  enable_api_key = true
-  api_key_name   = "my-api-key"
-
-  usage_plan_config = {
-    name        = "my-usage-plan"
-    description = "Usage plan for my API"
-    throttle_settings = {
-      burst_limit = 100
-      rate_limit  = 50
+  lambda_integrations = [
+    {
+      path                = "/users"
+      method              = "GET"
+      lambda_invoke_arn   = aws_lambda_function.get_users.invoke_arn
+      lambda_function_arn = aws_lambda_function.get_users.arn
+    },
+    {
+      path                = "/users"
+      method              = "POST"
+      lambda_invoke_arn   = aws_lambda_function.create_user.invoke_arn
+      lambda_function_arn = aws_lambda_function.create_user.arn
+      enable_cors         = true
+    },
+    {
+      path                = "/users/{id}"
+      method              = "GET"
+      lambda_invoke_arn   = aws_lambda_function.get_user.invoke_arn
+      lambda_function_arn = aws_lambda_function.get_user.arn
+      request_parameters  = {
+        "method.request.path.id" = true
+      }
     }
+  ]
+
+  tags = {
+    Environment = "production"
+    ManagedBy   = "terraform"
   }
 }
 ```
+
+## Ejemplos Avanzados
 
 ### Con Lambda Authorizer
 
@@ -101,122 +70,267 @@ module "api_gateway" {
   source = "github.com/KaribuLab/terraform-aws-api-gateway-v1"
 
   aws_region = "us-east-1"
-  api_name   = "my-api"
+  api_name   = "my-secure-api"
+  stage_name = "prod"
 
-  authorizer_config = {
-    name       = "my-authorizer"
-    lambda_arn = "arn:aws:lambda:us-east-1:123456789012:function:my-authorizer"
-    type       = "TOKEN"
+  # Definir authorizers
+  authorizers = {
+    jwt_auth = {
+      lambda_arn      = aws_lambda_function.authorizer.arn
+      type            = "TOKEN"
+      identity_source = "method.request.header.Authorization"
+    }
   }
+
+  # Usar authorizer en endpoints
+  lambda_integrations = [
+    {
+      path                = "/profile"
+      method              = "GET"
+      lambda_invoke_arn   = aws_lambda_function.get_profile.invoke_arn
+      lambda_function_arn = aws_lambda_function.get_profile.arn
+      authorization_type  = "CUSTOM"
+      authorizer_key      = "jwt_auth"
+    }
+  ]
 }
 ```
 
-
-## Alcance del Módulo
-
-Este módulo crea **solo el API Gateway REST API base** con opciones de autenticación (API Key y Lambda Authorizer). 
-
-**No incluye**:
-- Recursos y métodos (debes crearlos tú)
-- Deployment y Stage (debes crearlos tú después de agregar tus métodos)
-- Configuración de WAF, caché o throttling (se configuran a nivel de stage)
-
-### Ejemplo de Uso Completo
+### Con API Key y Usage Plan
 
 ```hcl
-# 1. Crear el API Gateway base con autenticación
 module "api_gateway" {
   source = "github.com/KaribuLab/terraform-aws-api-gateway-v1"
 
   aws_region = "us-east-1"
   api_name   = "my-api"
-  
-  # Opcional: API Key
+  stage_name = "prod"
+
+  lambda_integrations = [
+    {
+      path                = "/data"
+      method              = "GET"
+      lambda_invoke_arn   = aws_lambda_function.get_data.invoke_arn
+      lambda_function_arn = aws_lambda_function.get_data.arn
+      api_key_required    = true
+    }
+  ]
+
+  # Habilitar API Key
   enable_api_key = true
   api_key_name   = "my-api-key"
-  
-  # Opcional: Lambda Authorizer
-  authorizer_config = {
-    name       = "my-authorizer"
-    lambda_arn = aws_lambda_function.authorizer.arn
-    type       = "TOKEN"
+
+  usage_plan_config = {
+    name        = "standard-plan"
+    description = "Standard usage plan"
+    throttle_settings = {
+      burst_limit = 100
+      rate_limit  = 50
+    }
+    quota_settings = {
+      limit  = 10000
+      period = "DAY"
+    }
   }
 }
+```
 
-# 2. Agregar tus recursos y métodos
-resource "aws_api_gateway_resource" "example" {
-  rest_api_id = module.api_gateway.rest_api_id
-  parent_id   = module.api_gateway.rest_api_root_resource_id
-  path_part   = "example"
+### Con CORS y múltiples métodos
+
+```hcl
+module "api_gateway" {
+  source = "github.com/KaribuLab/terraform-aws-api-gateway-v1"
+
+  aws_region = "us-east-1"
+  api_name   = "my-api"
+  stage_name = "prod"
+
+  lambda_integrations = [
+    {
+      path                = "/items"
+      method              = "GET"
+      lambda_invoke_arn   = aws_lambda_function.list_items.invoke_arn
+      lambda_function_arn = aws_lambda_function.list_items.arn
+      enable_cors         = true
+      cors_allow_origin   = "'https://example.com'"
+    },
+    {
+      path                = "/items"
+      method              = "POST"
+      lambda_invoke_arn   = aws_lambda_function.create_item.invoke_arn
+      lambda_function_arn = aws_lambda_function.create_item.arn
+      enable_cors         = true
+      cors_allow_origin   = "'https://example.com'"
+    },
+    {
+      path                = "/items/{id}"
+      method              = "PUT"
+      lambda_invoke_arn   = aws_lambda_function.update_item.invoke_arn
+      lambda_function_arn = aws_lambda_function.update_item.arn
+      enable_cors         = true
+      cors_allow_origin   = "'https://example.com'"
+    }
+  ]
 }
+```
 
-resource "aws_api_gateway_method" "example" {
-  rest_api_id   = module.api_gateway.rest_api_id
-  resource_id   = aws_api_gateway_resource.example.id
-  http_method   = "GET"
-  authorization = "CUSTOM"
-  authorizer_id = module.api_gateway.authorizer_id
-}
+### Con Cache y Throttling
 
-resource "aws_api_gateway_integration" "example" {
-  rest_api_id = module.api_gateway.rest_api_id
-  resource_id = aws_api_gateway_resource.example.id
-  http_method = aws_api_gateway_method.example.http_method
-  type        = "AWS_PROXY"
-  uri         = aws_lambda_function.backend.invoke_arn
-}
+```hcl
+module "api_gateway" {
+  source = "github.com/KaribuLab/terraform-aws-api-gateway-v1"
 
-# 3. Crear deployment y stage
-resource "aws_api_gateway_deployment" "this" {
-  rest_api_id = module.api_gateway.rest_api_id
-  
-  # Forzar nuevo deployment cuando cambien los métodos
-  triggers = {
-    redeployment = sha1(jsonencode([
-      aws_api_gateway_resource.example.id,
-      aws_api_gateway_method.example.id,
-      aws_api_gateway_integration.example.id,
-    ]))
-  }
+  aws_region = "us-east-1"
+  api_name   = "my-api"
+  stage_name = "prod"
 
-  lifecycle {
-    create_before_destroy = true
-  }
-}
+  lambda_integrations = [
+    {
+      path                = "/products"
+      method              = "GET"
+      lambda_invoke_arn   = aws_lambda_function.get_products.invoke_arn
+      lambda_function_arn = aws_lambda_function.get_products.arn
+    }
+  ]
 
-resource "aws_api_gateway_stage" "prod" {
-  deployment_id = aws_api_gateway_deployment.this.id
-  rest_api_id   = module.api_gateway.rest_api_id
-  stage_name    = "prod"
-  
-  # Opcional: habilitar caché
+  # Habilitar cache a nivel de stage
   cache_cluster_enabled = true
   cache_cluster_size    = "0.5"
-}
 
-# 4. Opcional: Asociar Usage Plan al stage
-resource "aws_api_gateway_usage_plan_api" "this" {
-  usage_plan_id = module.api_gateway.usage_plan_id
-  api_id        = module.api_gateway.rest_api_id
-  stage_name    = aws_api_gateway_stage.prod.stage_name
-}
-
-# 5. Opcional: Configurar WAF
-resource "aws_wafv2_web_acl_association" "this" {
-  resource_arn = aws_api_gateway_stage.prod.arn
-  web_acl_arn  = aws_wafv2_web_acl.example.arn
-}
-
-# 6. Opcional: Configurar throttling por método
-resource "aws_api_gateway_method_settings" "example" {
-  rest_api_id = module.api_gateway.rest_api_id
-  stage_name  = aws_api_gateway_stage.prod.stage_name
-  method_path = "${aws_api_gateway_resource.example.path_part}/${aws_api_gateway_method.example.http_method}"
-  
-  settings {
-    throttling_burst_limit = 100
-    throttling_rate_limit  = 50
+  # Configurar cache y throttling por método
+  method_settings = {
+    "products/GET" = {
+      caching_enabled        = true
+      cache_ttl_in_seconds   = 300
+      throttling_burst_limit = 100
+      throttling_rate_limit  = 50
+      metrics_enabled        = true
+      logging_level          = "INFO"
+    }
   }
+}
+```
+
+## Variables
+
+### Variables Principales
+
+| Variable | Tipo | Default | Descripción |
+|----------|------|---------|-------------|
+| `aws_region` | `string` | - | Región de AWS (requerido) |
+| `api_name` | `string` | - | Nombre del API Gateway (requerido) |
+| `api_description` | `string` | `"API Gateway managed by Terraform"` | Descripción del API |
+| `stage_name` | `string` | - | Nombre del stage (requerido) |
+| `tags` | `map(string)` | `{}` | Tags para todos los recursos |
+
+### Lambda Integrations
+
+| Campo | Tipo | Default | Descripción |
+|-------|------|---------|-------------|
+| `path` | `string` | - | Ruta del endpoint (ej: `/users`, `/profile/{id}`) |
+| `method` | `string` | - | Método HTTP (GET, POST, PUT, DELETE, etc.) |
+| `lambda_invoke_arn` | `string` | - | ARN de invocación de Lambda |
+| `lambda_function_arn` | `string` | - | ARN de la función Lambda |
+| `authorization_type` | `string` | `"NONE"` | Tipo de autorización (NONE, AWS_IAM, CUSTOM) |
+| `authorizer_key` | `string` | `null` | Clave del authorizer (requerido si `authorization_type = "CUSTOM"`) |
+| `api_key_required` | `bool` | `false` | Si requiere API Key |
+| `request_parameters` | `map(bool)` | `{}` | Parámetros de request |
+| `enable_cors` | `bool` | `false` | Habilitar CORS |
+| `cors_allow_origin` | `string` | `"'*'"` | Valor de Access-Control-Allow-Origin |
+
+### Authorizers
+
+| Campo | Tipo | Default | Descripción |
+|-------|------|---------|-------------|
+| `lambda_arn` | `string` | - | ARN de la función Lambda authorizer |
+| `type` | `string` | `"TOKEN"` | Tipo de authorizer (TOKEN o REQUEST) |
+| `identity_source` | `string` | `"method.request.header.Authorization"` | Fuente de identidad |
+| `authorizer_result_ttl` | `number` | `300` | TTL del resultado en segundos |
+| `identity_validation_expression` | `string` | `null` | Expresión regex de validación |
+
+### Stage Configuration
+
+| Variable | Tipo | Default | Descripción |
+|----------|------|---------|-------------|
+| `stage_description` | `string` | `"Stage managed by Terraform"` | Descripción del stage |
+| `stage_variables` | `map(string)` | `{}` | Variables del stage |
+| `cache_cluster_enabled` | `bool` | `false` | Habilitar cache cluster |
+| `cache_cluster_size` | `string` | `"0.5"` | Tamaño del cache (GB) |
+| `xray_tracing_enabled` | `bool` | `false` | Habilitar X-Ray tracing |
+| `method_settings` | `map(object)` | `{}` | Configuración por método |
+
+### API Key y Usage Plan
+
+| Variable | Tipo | Default | Descripción |
+|----------|------|---------|-------------|
+| `enable_api_key` | `bool` | `false` | Habilitar API Key |
+| `api_key_name` | `string` | `null` | Nombre de la API Key |
+| `usage_plan_config` | `object` | `null` | Configuración del Usage Plan |
+
+## Outputs
+
+| Output | Descripción |
+|--------|-------------|
+| `rest_api_id` | ID del API Gateway |
+| `rest_api_root_resource_id` | ID del recurso raíz |
+| `rest_api_execution_arn` | ARN de ejecución |
+| `deployment_id` | ID del deployment |
+| `stage_name` | Nombre del stage |
+| `stage_arn` | ARN del stage |
+| `stage_invoke_url` | URL de invocación |
+| `resources` | Mapa de recursos creados |
+| `methods` | Mapa de métodos creados |
+| `authorizers` | Mapa de authorizers creados |
+| `api_key_id` | ID de la API Key (si está habilitada) |
+| `api_key_value` | Valor de la API Key (sensible) |
+| `usage_plan_id` | ID del Usage Plan |
+
+## Migración desde Versiones Anteriores
+
+Si estabas usando los submódulos `resources/lambda` o `stage`, ahora todo se maneja en el módulo principal:
+
+### Antes (con submódulos)
+
+```hcl
+module "api_gateway" {
+  source = "github.com/KaribuLab/terraform-aws-api-gateway-v1"
+  # ...
+}
+
+module "users_resource" {
+  source = "github.com/KaribuLab/terraform-aws-api-gateway-v1//resources/parent"
+  # ...
+}
+
+module "users_get" {
+  source = "github.com/KaribuLab/terraform-aws-api-gateway-v1//resources/lambda"
+  # ...
+}
+
+module "stage" {
+  source = "github.com/KaribuLab/terraform-aws-api-gateway-v1//stage"
+  # ...
+}
+```
+
+### Ahora (todo integrado)
+
+```hcl
+module "api_gateway" {
+  source = "github.com/KaribuLab/terraform-aws-api-gateway-v1"
+
+  aws_region = "us-east-1"
+  api_name   = "my-api"
+  stage_name = "prod"
+
+  lambda_integrations = [
+    {
+      path                = "/users"
+      method              = "GET"
+      lambda_invoke_arn   = aws_lambda_function.get_users.invoke_arn
+      lambda_function_arn = aws_lambda_function.get_users.arn
+    }
+  ]
 }
 ```
 
@@ -226,117 +340,24 @@ Este módulo incluye una suite completa de tests con Terratest.
 
 ### Ejecutar Tests
 
-#### Opción 1: Usando Makefile (recomendado)
-
 ```bash
-# Ejecutar todos los tests con limpieza automática
+# Ejecutar todos los tests
 make test
 
 # Ejecutar tests específicos
-make test-basic        # Solo test básico
-make test-auth         # Tests de autenticación
-make test-security     # Tests de WAF
-make test-performance  # Tests de caché y throttling
+make test-basic
+make test-lambda-integration
+make test-authorizer
 
-# Solo limpieza de recursos huérfanos
-make cleanup
-
-# Instalar dependencias
-make test-deps
-```
-
-#### Opción 2: Usando scripts directamente
-
-```bash
-# Ejecutar todos los tests con limpieza
-./scripts/run_tests.sh
-
-# Solo limpieza
-./scripts/cleanup_orphaned_resources.sh
-```
-
-#### Usar un perfil específico de AWS
-
-Para ejecutar los tests con un perfil específico de AWS (por ejemplo, `karibu`):
-
-```bash
-# Opción 1: Variable de entorno (recomendado)
-export AWS_PROFILE=karibu
-make test
-
-# Opción 2: Inline con Makefile
+# Con un perfil específico de AWS
 AWS_PROFILE=karibu make test
-
-# Opción 3: Con script directamente
-AWS_PROFILE=karibu ./scripts/run_tests.sh
-
-# Opción 4: Pasando como argumento al script
-./scripts/run_tests.sh karibu
 ```
 
-**Nota**: Terratest y AWS CLI respetan automáticamente la variable de entorno `AWS_PROFILE`, por lo que todos los comandos usarán el perfil especificado.
-
-Los tests siempre muestran la salida completa de Terraform (`terraform init`, `terraform apply`, etc.) en la salida estándar para facilitar el diagnóstico en pipelines de CI/CD.
-
-#### Opción 3: Ejecutar tests individuales
+### Limpieza de Recursos
 
 ```bash
-cd test
-go test -v -timeout 30m -run TestBasicAPIGateway ./...
-go test -v -timeout 30m -run TestAPIKey ./...
-go test -v -timeout 30m -run TestLambdaAuthorizer ./...
-go test -v -timeout 30m -run TestWAF ./...
-go test -v -timeout 30m -run TestCache ./...
-go test -v -timeout 30m -run TestThrottling ./...
+make cleanup
 ```
-
-### Limpieza de Recursos Huérfanos
-
-Los scripts de limpieza eliminan automáticamente recursos de prueba que:
-
-- Tienen el tag `terratest=true`
-- Tienen el tag `repository=github.com/KaribuLab/terraform-aws-api-gateway-v1`
-- Son más antiguos que 2 horas (para evitar eliminar tests en ejecución)
-
-**Importante**: Los scripts NUNCA eliminarán recursos que no tengan ambos tags, garantizando que no se borren recursos de otros módulos o proyectos.
-
-### Estructura de Tests
-
-```
-test/
-├── basic_test.go                    # Test funcionalidad básica
-├── api_key_test.go                  # Test API Key + Usage Plan
-├── lambda_authorizer_test.go        # Test Lambda Authorizer
-├── waf_test.go                      # Test integración WAF
-├── cache_test.go                    # Test caché
-├── throttling_test.go               # Test throttling
-├── fixtures/                        # Configuraciones Terraform para tests
-│   ├── basic/
-│   ├── api_key/
-│   ├── lambda_authorizer/
-│   ├── waf/
-│   ├── cache/
-│   └── throttling/
-└── helpers/
-    └── test_helpers.go              # Funciones comunes
-```
-
-## Variables
-
-Ver [main.tf](main.tf) para la lista completa de variables disponibles.
-
-## Outputs
-
-- `rest_api_id` - ID del API Gateway
-- `rest_api_root_resource_id` - ID del recurso raíz
-- `rest_api_execution_arn` - ARN de ejecución (útil para permisos Lambda)
-- `stage_name` - Nombre del stage creado por el módulo (null si el usuario crea el stage externamente)
-- `stage_arn` - ARN del stage creado por el módulo (null si el usuario crea el stage externamente)
-- `invoke_url` - URL de invocación del stage (null si el usuario crea el stage externamente)
-- `api_key_id` - ID de la API Key (si está habilitada)
-- `api_key_value` - Valor de la API Key (si está habilitada, sensible)
-- `usage_plan_id` - ID del Usage Plan (si está configurado)
-- `authorizer_id` - ID del Lambda Authorizer (si está configurado)
 
 ## Contribuir
 

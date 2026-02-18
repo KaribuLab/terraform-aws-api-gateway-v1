@@ -4,6 +4,10 @@ terraform {
       source  = "hashicorp/aws"
       version = ">= 5.0"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.4"
+    }
   }
 }
 
@@ -11,126 +15,67 @@ provider "aws" {
   region = var.aws_region
 }
 
-# Crear el API Gateway con stage_config
-# En la práctica, el usuario crearía recursos/métodos/deployment primero,
-# luego actualizaría el módulo con stage_config
-# Para este test, creamos todo en el orden correcto
+# Crear IAM role para Lambda
+resource "aws_iam_role" "lambda" {
+  name = "${var.api_name}-lambda-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = var.tags
+}
+
+# Crear función Lambda de prueba
+resource "aws_lambda_function" "test" {
+  filename         = "${path.module}/lambda_function.zip"
+  function_name    = "${var.api_name}-test-function"
+  role             = aws_iam_role.lambda.arn
+  handler          = "lambda_function.lambda_handler"
+  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
+  runtime          = "python3.11"
+
+  tags = var.tags
+}
+
+data "archive_file" "lambda_zip" {
+  type        = "zip"
+  source_file = "${path.module}/lambda_function.py"
+  output_path = "${path.module}/lambda_function.zip"
+}
+
+# Crear el API Gateway con stage configurado
 module "api_gateway" {
   source = "../../.."
 
   aws_region      = var.aws_region
   api_name        = var.api_name
   api_description = var.api_description
-  tags            = var.tags
-  # stage_config se define después de crear el deployment
-}
-
-# Crear recursos y métodos
-resource "aws_api_gateway_resource" "test" {
-  rest_api_id = module.api_gateway.rest_api_id
-  parent_id   = module.api_gateway.rest_api_root_resource_id
-  path_part   = "test"
-}
-
-resource "aws_api_gateway_method" "test" {
-  rest_api_id   = module.api_gateway.rest_api_id
-  resource_id   = aws_api_gateway_resource.test.id
-  http_method   = "GET"
-  authorization = "NONE"
-}
-
-resource "aws_api_gateway_integration" "test" {
-  rest_api_id = module.api_gateway.rest_api_id
-  resource_id = aws_api_gateway_resource.test.id
-  http_method = aws_api_gateway_method.test.http_method
-  type        = "MOCK"
-}
-
-# Crear deployment
-resource "aws_api_gateway_deployment" "test" {
-  rest_api_id = module.api_gateway.rest_api_id
-
-  triggers = {
-    redeployment = sha1(jsonencode([
-      aws_api_gateway_resource.test.id,
-      aws_api_gateway_method.test.id,
-      aws_api_gateway_integration.test.id,
-    ]))
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# Crear un segundo módulo que demuestra el uso de stage_config
-# Este módulo tiene su propio API Gateway, recursos, métodos y deployment
-module "api_gateway_with_stage" {
-  source = "../../.."
-
-  aws_region      = var.aws_region
-  api_name        = "${var.api_name}-with-stage"
-  api_description = var.api_description
+  stage_name      = var.stage_name
   tags            = var.tags
 
-  # stage_config se define después de crear el deployment para este módulo
-}
+  # Endpoint de prueba
+  lambda_integrations = [
+    {
+      path                = "/test"
+      method              = "GET"
+      lambda_invoke_arn   = aws_lambda_function.test.invoke_arn
+      lambda_function_arn = aws_lambda_function.test.arn
+    }
+  ]
 
-# Recursos para el segundo módulo
-resource "aws_api_gateway_resource" "test2" {
-  rest_api_id = module.api_gateway_with_stage.rest_api_id
-  parent_id   = module.api_gateway_with_stage.rest_api_root_resource_id
-  path_part   = "test"
-}
-
-resource "aws_api_gateway_method" "test2" {
-  rest_api_id   = module.api_gateway_with_stage.rest_api_id
-  resource_id   = aws_api_gateway_resource.test2.id
-  http_method   = "GET"
-  authorization = "NONE"
-}
-
-resource "aws_api_gateway_integration" "test2" {
-  rest_api_id = module.api_gateway_with_stage.rest_api_id
-  resource_id = aws_api_gateway_resource.test2.id
-  http_method = aws_api_gateway_method.test2.http_method
-  type        = "MOCK"
-}
-
-# Deployment para el segundo módulo
-resource "aws_api_gateway_deployment" "test2" {
-  rest_api_id = module.api_gateway_with_stage.rest_api_id
-
-  triggers = {
-    redeployment = sha1(jsonencode([
-      aws_api_gateway_resource.test2.id,
-      aws_api_gateway_method.test2.id,
-      aws_api_gateway_integration.test2.id,
-    ]))
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# Actualizar el segundo módulo con stage_config
-# Nota: Como Terraform no permite actualizar un módulo dinámicamente,
-# creamos el stage directamente aquí para demostrar la funcionalidad
-# En la práctica, el usuario actualizaría el módulo con stage_config en un segundo apply
-# o usaría un enfoque diferente como crear el stage fuera del módulo
-
-# Para este test, creamos el stage directamente usando el deployment del segundo módulo
-# Esto demuestra que el módulo puede funcionar con stage_config cuando se proporciona deployment_id
-resource "aws_api_gateway_stage" "test" {
-  rest_api_id   = module.api_gateway_with_stage.rest_api_id
-  deployment_id = aws_api_gateway_deployment.test2.id
-  stage_name    = var.stage_name
-
+  # Configuración de cache
   cache_cluster_enabled = var.cache_cluster_enabled
-  cache_cluster_size    = var.cache_cluster_enabled ? var.cache_cluster_size : null
-
-  tags = var.tags
+  cache_cluster_size    = var.cache_cluster_size
 }
 
 variable "aws_region" {

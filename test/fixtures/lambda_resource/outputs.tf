@@ -2,32 +2,34 @@ output "rest_api_id" {
   value = module.api_gateway.rest_api_id
 }
 
+output "rest_api_root_resource_id" {
+  value = module.api_gateway.rest_api_root_resource_id
+}
+
+# Outputs compatibles con el test
 output "users_resource_id" {
-  value = module.users_resource.resource_id
+  description = "ID del recurso /users"
+  value       = module.api_gateway.resources["/users"]
 }
 
 output "users_resource_path" {
-  value = module.users_resource.resource_path
+  description = "Path del recurso /users"
+  value       = "/users"
 }
 
 output "users_get_resource_id" {
-  value = module.users_get.resource_id
-}
-
-output "users_get_resource_path" {
-  value = module.users_get.resource_path
+  description = "ID del recurso para GET /users"
+  value       = module.api_gateway.resources["/users"]
 }
 
 output "users_get_method_id" {
-  value = module.users_get.method_id
+  description = "ID del método GET /users"
+  value       = module.api_gateway.methods["/users#GET"]
 }
 
 output "users_post_resource_id" {
-  value = module.users_post.resource_id
-}
-
-output "users_post_resource_path" {
-  value = module.users_post.resource_path
+  description = "ID del recurso para POST /users"
+  value       = module.api_gateway.resources["/users"]
 }
 
 output "lambda_function_name" {

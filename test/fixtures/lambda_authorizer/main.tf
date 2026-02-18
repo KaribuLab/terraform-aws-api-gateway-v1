@@ -53,45 +53,37 @@ data "archive_file" "lambda_zip" {
   output_path = "${path.module}/lambda_function.zip"
 }
 
+# Crear API Gateway con Lambda Authorizer
 module "api_gateway" {
   source = "../../.."
 
   aws_region      = var.aws_region
   api_name        = var.api_name
   api_description = var.api_description
+  stage_name      = "test"
   tags            = var.tags
-  # stage_config = null (por defecto, no crea stage)
 
-  # Configuración de Lambda Authorizer
-  authorizer_config = {
-    name                  = var.authorizer_name
-    lambda_arn            = aws_lambda_function.authorizer.arn
-    type                  = "TOKEN"
-    identity_source       = "method.request.header.Authorization"
-    authorizer_result_ttl = 300
+  # Definir authorizer
+  authorizers = {
+    test_auth = {
+      lambda_arn            = aws_lambda_function.authorizer.arn
+      type                  = "TOKEN"
+      identity_source       = "method.request.header.Authorization"
+      authorizer_result_ttl = 300
+    }
   }
-}
 
-# Agregar un recurso y método de prueba
-resource "aws_api_gateway_resource" "test" {
-  rest_api_id = module.api_gateway.rest_api_id
-  parent_id   = module.api_gateway.rest_api_root_resource_id
-  path_part   = "test"
-}
-
-resource "aws_api_gateway_method" "test" {
-  rest_api_id   = module.api_gateway.rest_api_id
-  resource_id   = aws_api_gateway_resource.test.id
-  http_method   = "GET"
-  authorization = "CUSTOM"
-  authorizer_id = module.api_gateway.authorizer_id
-}
-
-resource "aws_api_gateway_integration" "test" {
-  rest_api_id = module.api_gateway.rest_api_id
-  resource_id = aws_api_gateway_resource.test.id
-  http_method = aws_api_gateway_method.test.http_method
-  type        = "MOCK"
+  # Endpoint protegido con authorizer
+  lambda_integrations = [
+    {
+      path                = "/test"
+      method              = "GET"
+      lambda_invoke_arn   = aws_lambda_function.authorizer.invoke_arn
+      lambda_function_arn = aws_lambda_function.authorizer.arn
+      authorization_type  = "CUSTOM"
+      authorizer_key      = "test_auth"
+    }
+  ]
 }
 
 variable "aws_region" {
