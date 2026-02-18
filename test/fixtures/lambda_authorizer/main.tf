@@ -67,6 +67,7 @@ module "api_gateway" {
   authorizers = {
     test_auth = {
       lambda_arn            = aws_lambda_function.authorizer.arn
+      lambda_invoke_arn     = aws_lambda_function.authorizer.invoke_arn
       type                  = "TOKEN"
       identity_source       = "method.request.header.Authorization"
       authorizer_result_ttl = 300

@@ -9,3 +9,7 @@ output "stage_name" {
 output "stage_arn" {
   value = module.api_gateway.stage_arn
 }
+
+output "invoke_url" {
+  value = module.api_gateway.stage_invoke_url
+}

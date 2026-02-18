@@ -29,40 +29,13 @@ func TestLambdaResourceModule(t *testing.T) {
 	defer terraform.Destroy(t, terraformOptions)
 	terraform.InitAndApply(t, terraformOptions)
 
-	// Validar outputs del API Gateway
 	restAPIID := terraform.Output(t, terraformOptions, "rest_api_id")
 	assert.NotEmpty(t, restAPIID, "rest_api_id should not be empty")
 
-	// Validar outputs del módulo parent (recurso compartido)
-	usersResourceID := terraform.Output(t, terraformOptions, "users_resource_id")
-	usersResourcePath := terraform.Output(t, terraformOptions, "users_resource_path")
+	stageInvokeURL := terraform.Output(t, terraformOptions, "stage_invoke_url")
+	assert.NotEmpty(t, stageInvokeURL, "stage_invoke_url should not be empty")
+	assert.Contains(t, stageInvokeURL, restAPIID, "stage_invoke_url should contain rest_api_id")
 
-	assert.NotEmpty(t, usersResourceID, "users_resource_id should not be empty")
-	assert.Equal(t, "/users", usersResourcePath, "users_resource_path should be '/users'")
-
-	require.NotNil(t, usersResourceID)
-	require.NotNil(t, usersResourcePath)
-
-	// Validar outputs del módulo users_get (GET /users)
-	usersGetResourceID := terraform.Output(t, terraformOptions, "users_get_resource_id")
-	usersGetMethodID := terraform.Output(t, terraformOptions, "users_get_method_id")
-
-	assert.NotEmpty(t, usersGetResourceID, "users_get_resource_id should not be empty")
-	assert.Equal(t, usersResourceID, usersGetResourceID, "users_get_resource_id should match users_resource_id")
-	assert.NotEmpty(t, usersGetMethodID, "users_get_method_id should not be empty")
-
-	require.NotNil(t, usersGetResourceID)
-	require.NotNil(t, usersGetMethodID)
-
-	// Validar outputs del módulo users_post (POST /users con CORS)
-	usersPostResourceID := terraform.Output(t, terraformOptions, "users_post_resource_id")
-
-	assert.NotEmpty(t, usersPostResourceID, "users_post_resource_id should not be empty")
-	assert.Equal(t, usersResourceID, usersPostResourceID, "users_post_resource_id should match users_resource_id")
-
-	require.NotNil(t, usersPostResourceID)
-
-	// Validar Lambda
 	lambdaFunctionName := terraform.Output(t, terraformOptions, "lambda_function_name")
 	lambdaFunctionARN := terraform.Output(t, terraformOptions, "lambda_function_arn")
 

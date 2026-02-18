@@ -5,7 +5,7 @@ Módulo de Terraform para crear y gestionar API Gateway REST API v1 en AWS con i
 ## Características
 
 - **Interfaz declarativa**: Define todos tus endpoints Lambda en una sola variable
-- **Gestión automática de recursos**: Crea automáticamente la jerarquía de paths necesaria
+- **OpenAPI interno**: El módulo genera internamente un spec OpenAPI 3.0 para la creación de la API, eliminando ciclos de dependencia
 - **Deployment y Stage integrados**: No necesitas gestionar deployments manualmente
 - **Lambda Authorizers**: Soporte completo para authorizers personalizados
 - **CORS automático**: Habilita CORS por endpoint con configuración simple
@@ -48,9 +48,6 @@ module "api_gateway" {
       method              = "GET"
       lambda_invoke_arn   = aws_lambda_function.get_user.invoke_arn
       lambda_function_arn = aws_lambda_function.get_user.arn
-      request_parameters  = {
-        "method.request.path.id" = true
-      }
     }
   ]
 
@@ -73,16 +70,15 @@ module "api_gateway" {
   api_name   = "my-secure-api"
   stage_name = "prod"
 
-  # Definir authorizers
   authorizers = {
     jwt_auth = {
-      lambda_arn      = aws_lambda_function.authorizer.arn
-      type            = "TOKEN"
-      identity_source = "method.request.header.Authorization"
+      lambda_arn        = aws_lambda_function.authorizer.arn
+      lambda_invoke_arn = aws_lambda_function.authorizer.invoke_arn
+      type              = "TOKEN"
+      identity_source   = "method.request.header.Authorization"
     }
   }
 
-  # Usar authorizer en endpoints
   lambda_integrations = [
     {
       path                = "/profile"
@@ -116,7 +112,6 @@ module "api_gateway" {
     }
   ]
 
-  # Habilitar API Key
   enable_api_key = true
   api_key_name   = "my-api-key"
 
@@ -193,11 +188,9 @@ module "api_gateway" {
     }
   ]
 
-  # Habilitar cache a nivel de stage
   cache_cluster_enabled = true
   cache_cluster_size    = "0.5"
 
-  # Configurar cache y throttling por método
   method_settings = {
     "products/GET" = {
       caching_enabled        = true
@@ -208,6 +201,39 @@ module "api_gateway" {
       logging_level          = "INFO"
     }
   }
+}
+```
+
+### Con Paths Anidados
+
+```hcl
+module "api_gateway" {
+  source = "github.com/KaribuLab/terraform-aws-api-gateway-v1"
+
+  aws_region = "us-east-1"
+  api_name   = "my-api"
+  stage_name = "prod"
+
+  lambda_integrations = [
+    {
+      path                = "/profile/{id}"
+      method              = "GET"
+      lambda_invoke_arn   = aws_lambda_function.get_profile.invoke_arn
+      lambda_function_arn = aws_lambda_function.get_profile.arn
+    },
+    {
+      path                = "/profile/{id}/services"
+      method              = "GET"
+      lambda_invoke_arn   = aws_lambda_function.get_services.invoke_arn
+      lambda_function_arn = aws_lambda_function.get_services.arn
+    },
+    {
+      path                = "/profile/{id}/services/{serviceId}"
+      method              = "GET"
+      lambda_invoke_arn   = aws_lambda_function.get_service.invoke_arn
+      lambda_function_arn = aws_lambda_function.get_service.arn
+    }
+  ]
 }
 ```
 
@@ -231,18 +257,20 @@ module "api_gateway" {
 | `method` | `string` | - | Método HTTP (GET, POST, PUT, DELETE, etc.) |
 | `lambda_invoke_arn` | `string` | - | ARN de invocación de Lambda |
 | `lambda_function_arn` | `string` | - | ARN de la función Lambda |
-| `authorization_type` | `string` | `"NONE"` | Tipo de autorización (NONE, AWS_IAM, CUSTOM) |
+| `authorization_type` | `string` | `"NONE"` | Tipo de autorización (NONE, CUSTOM) |
 | `authorizer_key` | `string` | `null` | Clave del authorizer (requerido si `authorization_type = "CUSTOM"`) |
 | `api_key_required` | `bool` | `false` | Si requiere API Key |
-| `request_parameters` | `map(bool)` | `{}` | Parámetros de request |
 | `enable_cors` | `bool` | `false` | Habilitar CORS |
 | `cors_allow_origin` | `string` | `"'*'"` | Valor de Access-Control-Allow-Origin |
+| `cors_allow_headers` | `string` | headers estándar | Headers permitidos en CORS |
+| `cors_allow_methods` | `string` | auto-generado | Métodos permitidos en CORS |
 
 ### Authorizers
 
 | Campo | Tipo | Default | Descripción |
 |-------|------|---------|-------------|
 | `lambda_arn` | `string` | - | ARN de la función Lambda authorizer |
+| `lambda_invoke_arn` | `string` | - | ARN de invocación de la función Lambda authorizer |
 | `type` | `string` | `"TOKEN"` | Tipo de authorizer (TOKEN o REQUEST) |
 | `identity_source` | `string` | `"method.request.header.Authorization"` | Fuente de identidad |
 | `authorizer_result_ttl` | `number` | `300` | TTL del resultado en segundos |
@@ -278,61 +306,21 @@ module "api_gateway" {
 | `stage_name` | Nombre del stage |
 | `stage_arn` | ARN del stage |
 | `stage_invoke_url` | URL de invocación |
-| `resources` | Mapa de recursos creados |
-| `methods` | Mapa de métodos creados |
-| `authorizers` | Mapa de authorizers creados |
+| `stage_execution_arn` | ARN de ejecución del stage |
 | `api_key_id` | ID de la API Key (si está habilitada) |
 | `api_key_value` | Valor de la API Key (sensible) |
 | `usage_plan_id` | ID del Usage Plan |
 
-## Migración desde Versiones Anteriores
+## Arquitectura Interna
 
-Si estabas usando los submódulos `resources/lambda` o `stage`, ahora todo se maneja en el módulo principal:
+El módulo utiliza internamente la especificación OpenAPI 3.0 para definir la API. A partir de los inputs `lambda_integrations` y `authorizers`, genera un spec OpenAPI que incluye:
 
-### Antes (con submódulos)
+- Paths y métodos HTTP
+- Integraciones `AWS_PROXY` con Lambda
+- Security schemes para authorizers y API Keys
+- Métodos OPTIONS para CORS con integración mock
 
-```hcl
-module "api_gateway" {
-  source = "github.com/KaribuLab/terraform-aws-api-gateway-v1"
-  # ...
-}
-
-module "users_resource" {
-  source = "github.com/KaribuLab/terraform-aws-api-gateway-v1//resources/parent"
-  # ...
-}
-
-module "users_get" {
-  source = "github.com/KaribuLab/terraform-aws-api-gateway-v1//resources/lambda"
-  # ...
-}
-
-module "stage" {
-  source = "github.com/KaribuLab/terraform-aws-api-gateway-v1//stage"
-  # ...
-}
-```
-
-### Ahora (todo integrado)
-
-```hcl
-module "api_gateway" {
-  source = "github.com/KaribuLab/terraform-aws-api-gateway-v1"
-
-  aws_region = "us-east-1"
-  api_name   = "my-api"
-  stage_name = "prod"
-
-  lambda_integrations = [
-    {
-      path                = "/users"
-      method              = "GET"
-      lambda_invoke_arn   = aws_lambda_function.get_users.invoke_arn
-      lambda_function_arn = aws_lambda_function.get_users.arn
-    }
-  ]
-}
-```
+Esto permite manejar rutas anidadas de cualquier profundidad sin los ciclos de dependencia que existirían con recursos individuales de Terraform.
 
 ## Testing
 
@@ -341,15 +329,12 @@ Este módulo incluye una suite completa de tests con Terratest.
 ### Ejecutar Tests
 
 ```bash
-# Ejecutar todos los tests
 make test
 
-# Ejecutar tests específicos
 make test-basic
 make test-lambda-integration
 make test-authorizer
 
-# Con un perfil específico de AWS
 AWS_PROFILE=karibu make test
 ```
 

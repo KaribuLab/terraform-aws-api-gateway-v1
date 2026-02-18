@@ -6,30 +6,8 @@ output "rest_api_root_resource_id" {
   value = module.api_gateway.rest_api_root_resource_id
 }
 
-# Outputs compatibles con el test
-output "users_resource_id" {
-  description = "ID del recurso /users"
-  value       = module.api_gateway.resources["/users"]
-}
-
-output "users_resource_path" {
-  description = "Path del recurso /users"
-  value       = "/users"
-}
-
-output "users_get_resource_id" {
-  description = "ID del recurso para GET /users"
-  value       = module.api_gateway.resources["/users"]
-}
-
-output "users_get_method_id" {
-  description = "ID del método GET /users"
-  value       = module.api_gateway.methods["/users#GET"]
-}
-
-output "users_post_resource_id" {
-  description = "ID del recurso para POST /users"
-  value       = module.api_gateway.resources["/users"]
+output "stage_invoke_url" {
+  value = module.api_gateway.stage_invoke_url
 }
 
 output "lambda_function_name" {

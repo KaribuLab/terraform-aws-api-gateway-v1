@@ -41,14 +41,12 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# Crear archivo ZIP para las Lambdas
 data "archive_file" "lambda_zip" {
   type        = "zip"
   source_file = "${path.module}/lambda_function.py"
   output_path = "${path.module}/lambda_function.zip"
 }
 
-# Lambda para GET /users
 resource "aws_lambda_function" "get_users" {
   filename         = data.archive_file.lambda_zip.output_path
   function_name    = "${var.api_name}-get-users"
@@ -58,7 +56,6 @@ resource "aws_lambda_function" "get_users" {
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 }
 
-# Lambda para POST /users
 resource "aws_lambda_function" "create_user" {
   filename         = data.archive_file.lambda_zip.output_path
   function_name    = "${var.api_name}-create-user"
@@ -68,7 +65,6 @@ resource "aws_lambda_function" "create_user" {
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 }
 
-# Lambda para GET /users/{id}
 resource "aws_lambda_function" "get_user" {
   filename         = data.archive_file.lambda_zip.output_path
   function_name    = "${var.api_name}-get-user"
@@ -78,7 +74,6 @@ resource "aws_lambda_function" "get_user" {
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 }
 
-# Lambda Authorizer
 resource "aws_lambda_function" "authorizer" {
   filename         = data.archive_file.lambda_zip.output_path
   function_name    = "${var.api_name}-authorizer"
@@ -100,19 +95,17 @@ module "api_gateway" {
   api_description = "Complete API Gateway example with all features"
   stage_name      = var.stage_name
 
-  # Definir authorizers
   authorizers = {
     jwt_auth = {
       lambda_arn            = aws_lambda_function.authorizer.arn
+      lambda_invoke_arn     = aws_lambda_function.authorizer.invoke_arn
       type                  = "TOKEN"
       identity_source       = "method.request.header.Authorization"
       authorizer_result_ttl = 300
     }
   }
 
-  # Definir integraciones Lambda
   lambda_integrations = [
-    # GET /users (público)
     {
       path                = "/users"
       method              = "GET"
@@ -120,7 +113,6 @@ module "api_gateway" {
       lambda_function_arn = aws_lambda_function.get_users.arn
       enable_cors         = true
     },
-    # POST /users (requiere autenticación)
     {
       path                = "/users"
       method              = "POST"
@@ -130,21 +122,16 @@ module "api_gateway" {
       authorizer_key      = "jwt_auth"
       enable_cors         = true
     },
-    # GET /users/{id} (requiere API Key)
     {
       path                = "/users/{id}"
       method              = "GET"
       lambda_invoke_arn   = aws_lambda_function.get_user.invoke_arn
       lambda_function_arn = aws_lambda_function.get_user.arn
       api_key_required    = true
-      request_parameters = {
-        "method.request.path.id" = true
-      }
-      enable_cors = true
+      enable_cors         = true
     }
   ]
 
-  # Habilitar API Key
   enable_api_key = true
   api_key_name   = "${var.api_name}-key"
 
@@ -161,14 +148,11 @@ module "api_gateway" {
     }
   }
 
-  # Configuración de cache
   cache_cluster_enabled = var.enable_cache
   cache_cluster_size    = "0.5"
 
-  # X-Ray tracing
   xray_tracing_enabled = true
 
-  # Method settings
   method_settings = {
     "users/GET" = {
       metrics_enabled        = true
@@ -205,9 +189,4 @@ output "api_key_value" {
   description = "Valor de la API Key (sensible)"
   value       = module.api_gateway.api_key_value
   sensitive   = true
-}
-
-output "authorizer_id" {
-  description = "ID del Lambda Authorizer"
-  value       = module.api_gateway.authorizers["jwt_auth"]
 }

@@ -1,95 +1,194 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0"
+    }
+  }
+}
+
 # ============================================================================
-# API Gateway REST API
+# Locals: Generar spec OpenAPI a partir de lambda_integrations y authorizers
+# ============================================================================
+
+locals {
+  integrations_by_path = {
+    for path in distinct([for i in var.lambda_integrations : i.path]) :
+    path => [for i in var.lambda_integrations : i if i.path == path]
+  }
+
+  cors_paths = toset([
+    for i in var.lambda_integrations : i.path if i.enable_cors
+  ])
+
+  # Construir security list por integración
+  integration_security = {
+    for i in var.lambda_integrations :
+    "${i.path}:${i.method}" => (
+      i.authorization_type == "CUSTOM" && i.api_key_required
+      ? [{ (i.authorizer_key) = [], api_key = [] }]
+      : i.authorization_type == "CUSTOM"
+      ? [{ (i.authorizer_key) = [] }]
+      : i.api_key_required
+      ? [{ api_key = [] }]
+      : []
+    )
+  }
+
+  # CORS: calcular métodos permitidos por path
+  cors_methods_by_path = {
+    for path in local.cors_paths :
+    path => join(",", concat(
+      [for i in local.integrations_by_path[path] : i.method],
+      ["OPTIONS"]
+    ))
+  }
+
+  # Primera integración con CORS habilitado por path (para tomar defaults)
+  cors_config_by_path = {
+    for path in local.cors_paths :
+    path => [for i in local.integrations_by_path[path] : i if i.enable_cors][0]
+  }
+
+  openapi_paths = {
+    for path, integrations in local.integrations_by_path :
+    path => merge(
+      {
+        for i in integrations :
+        lower(i.method) => merge(
+          {
+            x-amazon-apigateway-integration = {
+              type                = "aws_proxy"
+              httpMethod          = "POST"
+              uri                 = i.lambda_invoke_arn
+              passthroughBehavior = "when_no_match"
+            }
+          },
+          length(local.integration_security["${i.path}:${i.method}"]) > 0
+          ? { security = local.integration_security["${i.path}:${i.method}"] }
+          : {}
+        )
+      },
+      contains(local.cors_paths, path) ? {
+        options = {
+          summary = "CORS preflight"
+          responses = {
+            "200" = {
+              description = "CORS preflight response"
+              headers = {
+                Access-Control-Allow-Origin  = { schema = { type = "string" } }
+                Access-Control-Allow-Methods = { schema = { type = "string" } }
+                Access-Control-Allow-Headers = { schema = { type = "string" } }
+              }
+            }
+          }
+          x-amazon-apigateway-integration = {
+            type = "mock"
+            requestTemplates = {
+              "application/json" = "{\"statusCode\": 200}"
+            }
+            responses = {
+              default = {
+                statusCode = "200"
+                responseParameters = {
+                  "method.response.header.Access-Control-Allow-Headers" = local.cors_config_by_path[path].cors_allow_headers
+                  "method.response.header.Access-Control-Allow-Methods" = coalesce(
+                    local.cors_config_by_path[path].cors_allow_methods,
+                    "'${local.cors_methods_by_path[path]}'"
+                  )
+                  "method.response.header.Access-Control-Allow-Origin" = local.cors_config_by_path[path].cors_allow_origin
+                }
+              }
+            }
+          }
+        }
+      } : {}
+    )
+  }
+
+  # Extraer nombre del header desde identity_source (ej: method.request.header.Authorization -> Authorization)
+  security_schemes = {
+    for key, auth in var.authorizers :
+    key => {
+      type                         = "apiKey"
+      name                         = element(split(".", auth.identity_source), length(split(".", auth.identity_source)) - 1)
+      in                           = "header"
+      x-amazon-apigateway-authtype = "custom"
+      x-amazon-apigateway-authorizer = merge(
+        {
+          type                         = auth.type == "TOKEN" ? "token" : "request"
+          authorizerUri                = auth.lambda_invoke_arn
+          authorizerResultTtlInSeconds = auth.authorizer_result_ttl
+          identitySource               = auth.identity_source
+        },
+        auth.identity_validation_expression != null ? {
+          identityValidationExpression = auth.identity_validation_expression
+        } : {}
+      )
+    }
+  }
+
+  api_key_scheme = var.enable_api_key ? {
+    api_key = {
+      type = "apiKey"
+      name = "x-api-key"
+      in   = "header"
+    }
+  } : {}
+
+  all_security_schemes = merge(local.security_schemes, local.api_key_scheme)
+
+  openapi_spec = merge(
+    {
+      openapi = "3.0.1"
+      info = {
+        title   = var.api_name
+        version = "1.0"
+      }
+      paths = local.openapi_paths
+    },
+    length(local.all_security_schemes) > 0 ? {
+      components = {
+        securitySchemes = local.all_security_schemes
+      }
+    } : {}
+  )
+
+  lambda_permission_keys = {
+    for i in var.lambda_integrations :
+    "${replace(trimprefix(i.path, "/"), "/", "-")}-${i.method}" => i
+  }
+}
+
+# ============================================================================
+# API Gateway REST API (con spec OpenAPI)
 # ============================================================================
 
 resource "aws_api_gateway_rest_api" "this" {
   name        = var.api_name
   description = var.api_description
+  body        = jsonencode(local.openapi_spec)
   tags        = var.tags
 }
 
 # ============================================================================
-# Locals para normalización de paths y generación de recursos
+# Permisos Lambda para integraciones
 # ============================================================================
 
-locals {
-  # Normalizar paths: eliminar "/" inicial y final, dividir en segmentos
-  # Ejemplo: "/users/{id}/orders" -> ["users", "{id}", "orders"]
-  path_segments = {
-    for integration in var.lambda_integrations :
-    integration.path => split("/", trim(integration.path, "/"))
-  }
+resource "aws_lambda_permission" "integration" {
+  for_each = local.lambda_permission_keys
 
-  # Generar todos los recursos necesarios (jerarquía completa de paths)
-  # Para "/users/{id}/orders" necesitamos: /users, /users/{id}, /users/{id}/orders
-  all_resources = flatten([
-    for path, segments in local.path_segments : [
-      for i in range(1, length(segments) + 1) : {
-        path        = "/${join("/", slice(segments, 0, i))}"
-        path_part   = segments[i - 1]
-        parent_path = i == 1 ? "/" : "/${join("/", slice(segments, 0, i - 1))}"
-      }
-    ]
-  ])
-
-  # Deduplicar recursos (un path puede aparecer en múltiples integraciones)
-  unique_resources = {
-    for resource in local.all_resources :
-    resource.path => resource
-  }
-
-  # Crear clave única para cada integración (path + método)
-  integration_keys = {
-    for integration in var.lambda_integrations :
-    "${integration.path}#${integration.method}" => integration
-  }
-
-  # Crear mapa de CORS: agrupar por path los métodos que tienen CORS habilitado
-  cors_paths = toset([
-    for integration in var.lambda_integrations :
-    integration.path if integration.enable_cors
-  ])
-
-  # Para cada path con CORS, obtener todos los métodos
-  cors_methods_by_path = {
-    for path in local.cors_paths :
-    path => join(",", [
-      for integration in var.lambda_integrations :
-      integration.method if integration.path == path
-    ])
-  }
+  statement_id  = "AllowAPIGatewayInvoke-${each.key}"
+  action        = "lambda:InvokeFunction"
+  function_name = each.value.lambda_function_arn
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.this.execution_arn}/*/*"
 }
 
 # ============================================================================
-# Recursos de API Gateway (jerarquía de paths)
+# Permisos Lambda para authorizers
 # ============================================================================
 
-resource "aws_api_gateway_resource" "this" {
-  for_each = local.unique_resources
-
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  parent_id   = each.value.parent_path == "/" ? aws_api_gateway_rest_api.this.root_resource_id : aws_api_gateway_resource.this[each.value.parent_path].id
-  path_part   = each.value.path_part
-}
-
-# ============================================================================
-# Lambda Authorizers
-# ============================================================================
-
-resource "aws_api_gateway_authorizer" "this" {
-  for_each = var.authorizers
-
-  name                             = each.key
-  rest_api_id                      = aws_api_gateway_rest_api.this.id
-  authorizer_uri                   = "arn:aws:apigateway:${var.aws_region}:lambda:path/2015-03-31/functions/${each.value.lambda_arn}/invocations"
-  authorizer_credentials           = null
-  authorizer_result_ttl_in_seconds = each.value.authorizer_result_ttl
-  identity_source                  = each.value.identity_source
-  type                             = each.value.type
-  identity_validation_expression   = each.value.identity_validation_expression
-}
-
-# Permisos para que API Gateway invoque los Lambda Authorizers
 resource "aws_lambda_permission" "authorizer" {
   for_each = var.authorizers
 
@@ -101,153 +200,19 @@ resource "aws_lambda_permission" "authorizer" {
 }
 
 # ============================================================================
-# Métodos HTTP para integraciones Lambda
-# ============================================================================
-
-resource "aws_api_gateway_method" "this" {
-  for_each = local.integration_keys
-
-  rest_api_id   = aws_api_gateway_rest_api.this.id
-  resource_id   = aws_api_gateway_resource.this[each.value.path].id
-  http_method   = each.value.method
-  authorization = each.value.authorization_type
-
-  # Si usa CUSTOM authorization, vincular el authorizer
-  authorizer_id = each.value.authorization_type == "CUSTOM" && each.value.authorizer_key != null ? aws_api_gateway_authorizer.this[each.value.authorizer_key].id : null
-
-  api_key_required   = each.value.api_key_required
-  request_parameters = each.value.request_parameters
-}
-
-# ============================================================================
-# Integraciones Lambda (AWS_PROXY)
-# ============================================================================
-
-resource "aws_api_gateway_integration" "this" {
-  for_each = local.integration_keys
-
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  resource_id = aws_api_gateway_resource.this[each.value.path].id
-  http_method = aws_api_gateway_method.this[each.key].http_method
-
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = each.value.lambda_invoke_arn
-}
-
-# ============================================================================
-# Permisos Lambda para API Gateway
-# ============================================================================
-
-resource "aws_lambda_permission" "this" {
-  for_each = local.integration_keys
-
-  statement_id  = "AllowAPIGatewayInvoke-${replace(each.value.path, "/", "-")}-${each.value.method}"
-  action        = "lambda:InvokeFunction"
-  function_name = each.value.lambda_function_arn
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.this.execution_arn}/*/*"
-}
-
-# ============================================================================
-# CORS Support (método OPTIONS automático)
-# ============================================================================
-
-resource "aws_api_gateway_method" "cors_options" {
-  for_each = local.cors_paths
-
-  rest_api_id   = aws_api_gateway_rest_api.this.id
-  resource_id   = aws_api_gateway_resource.this[each.key].id
-  http_method   = "OPTIONS"
-  authorization = "NONE"
-}
-
-resource "aws_api_gateway_integration" "cors_options" {
-  for_each = local.cors_paths
-
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  resource_id = aws_api_gateway_resource.this[each.key].id
-  http_method = aws_api_gateway_method.cors_options[each.key].http_method
-
-  type = "MOCK"
-
-  request_templates = {
-    "application/json" = "{\"statusCode\": 200}"
-  }
-}
-
-resource "aws_api_gateway_method_response" "cors_options" {
-  for_each = local.cors_paths
-
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  resource_id = aws_api_gateway_resource.this[each.key].id
-  http_method = aws_api_gateway_method.cors_options[each.key].http_method
-  status_code = "200"
-
-  response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers" = true
-    "method.response.header.Access-Control-Allow-Methods" = true
-    "method.response.header.Access-Control-Allow-Origin"  = true
-  }
-}
-
-resource "aws_api_gateway_integration_response" "cors_options" {
-  for_each = local.cors_paths
-
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  resource_id = aws_api_gateway_resource.this[each.key].id
-  http_method = aws_api_gateway_method.cors_options[each.key].http_method
-  status_code = "200"
-
-  response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-    "method.response.header.Access-Control-Allow-Methods" = "'${local.cors_methods_by_path[each.key]},OPTIONS'"
-    "method.response.header.Access-Control-Allow-Origin" = [
-      for integration in var.lambda_integrations :
-      integration.cors_allow_origin if integration.path == each.key && integration.enable_cors
-    ][0]
-  }
-
-  depends_on = [
-    aws_api_gateway_integration.cors_options,
-    aws_api_gateway_method_response.cors_options
-  ]
-}
-
-# ============================================================================
 # Deployment
 # ============================================================================
 
 resource "aws_api_gateway_deployment" "this" {
   rest_api_id = aws_api_gateway_rest_api.this.id
-  description = var.deployment_description
 
-  # Triggers para forzar nuevo deployment cuando cambien recursos
   triggers = {
-    redeployment = sha1(jsonencode([
-      # Recursos
-      [for k, v in aws_api_gateway_resource.this : v.id],
-      # Métodos
-      [for k, v in aws_api_gateway_method.this : v.id],
-      # Integraciones
-      [for k, v in aws_api_gateway_integration.this : v.id],
-      # Authorizers
-      [for k, v in aws_api_gateway_authorizer.this : v.id],
-      # CORS
-      [for k, v in aws_api_gateway_method.cors_options : v.id],
-    ]))
+    redeployment = sha1(jsonencode(local.openapi_spec))
   }
 
   lifecycle {
     create_before_destroy = true
   }
-
-  depends_on = [
-    aws_api_gateway_method.this,
-    aws_api_gateway_integration.this,
-    aws_api_gateway_method.cors_options,
-    aws_api_gateway_integration.cors_options,
-  ]
 }
 
 # ============================================================================

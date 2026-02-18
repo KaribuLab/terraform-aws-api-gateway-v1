@@ -47,38 +47,6 @@ output "stage_execution_arn" {
 }
 
 # ============================================================================
-# Outputs de Recursos generados
-# ============================================================================
-
-output "resources" {
-  description = "Mapa de recursos creados (path -> resource_id)."
-  value = {
-    for path, resource in aws_api_gateway_resource.this :
-    path => resource.id
-  }
-}
-
-output "methods" {
-  description = "Mapa de métodos creados (path#method -> method_id)."
-  value = {
-    for key, method in aws_api_gateway_method.this :
-    key => method.id
-  }
-}
-
-# ============================================================================
-# Outputs de Authorizers
-# ============================================================================
-
-output "authorizers" {
-  description = "Mapa de authorizers creados (key -> authorizer_id)."
-  value = {
-    for key, authorizer in aws_api_gateway_authorizer.this :
-    key => authorizer.id
-  }
-}
-
-# ============================================================================
 # Outputs de API Key y Usage Plan
 # ============================================================================
 

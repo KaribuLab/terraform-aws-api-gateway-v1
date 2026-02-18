@@ -20,10 +20,10 @@ func TestLambdaAuthorizer(t *testing.T) {
 		"fixtures/lambda_authorizer",
 		region,
 		map[string]interface{}{
-			"api_name":            testName,
+			"api_name":             testName,
 			"lambda_function_name": testName + "-authorizer",
 			"authorizer_name":      testName + "-auth",
-			"tags":                commonTags,
+			"tags":                 commonTags,
 		},
 	)
 
@@ -31,17 +31,15 @@ func TestLambdaAuthorizer(t *testing.T) {
 
 	terraform.InitAndApply(t, terraformOptions)
 
-	// Validar outputs
 	restAPIID := terraform.Output(t, terraformOptions, "rest_api_id")
-	authorizerID := terraform.Output(t, terraformOptions, "authorizer_id")
+	stageInvokeURL := terraform.Output(t, terraformOptions, "stage_invoke_url")
 	lambdaARN := terraform.Output(t, terraformOptions, "lambda_function_arn")
 
-	// Validaciones
 	assert.NotEmpty(t, restAPIID, "rest_api_id should not be empty")
-	assert.NotEmpty(t, authorizerID, "authorizer_id should not be empty")
+	assert.NotEmpty(t, stageInvokeURL, "stage_invoke_url should not be empty")
 	assert.NotEmpty(t, lambdaARN, "lambda_function_arn should not be empty")
 	assert.Contains(t, lambdaARN, "lambda", "lambda_function_arn should contain 'lambda'")
 
-	require.NotNil(t, authorizerID)
+	require.NotNil(t, stageInvokeURL)
 	require.NotNil(t, lambdaARN)
 }
