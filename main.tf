@@ -38,13 +38,6 @@ locals {
     resource.path => resource
   }
 
-  # Crear mapa de parent_id para cada recurso
-  # El root "/" usa rest_api_root_resource_id, los demás usan el resource_id del padre
-  resource_parent_map = {
-    for path, resource in local.unique_resources :
-    path => resource.parent_path == "/" ? aws_api_gateway_rest_api.this.root_resource_id : aws_api_gateway_resource.this[resource.parent_path].id
-  }
-
   # Crear clave única para cada integración (path + método)
   integration_keys = {
     for integration in var.lambda_integrations :
@@ -75,7 +68,7 @@ resource "aws_api_gateway_resource" "this" {
   for_each = local.unique_resources
 
   rest_api_id = aws_api_gateway_rest_api.this.id
-  parent_id   = local.resource_parent_map[each.key]
+  parent_id   = each.value.parent_path == "/" ? aws_api_gateway_rest_api.this.root_resource_id : aws_api_gateway_resource.this[each.value.parent_path].id
   path_part   = each.value.path_part
 }
 
