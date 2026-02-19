@@ -293,7 +293,7 @@ module "api_gateway" {
 |----------|------|---------|-------------|
 | `enable_api_key` | `bool` | `false` | Habilitar API Key |
 | `api_key_name` | `string` | `null` | Nombre de la API Key |
-| `usage_plan_config` | `object` | `null` | Configuración del Usage Plan |
+| `usage_plan_config` | `object` | `null` | Configuración del Usage Plan (requerido si `enable_api_key = true`) |
 
 ## Outputs
 
