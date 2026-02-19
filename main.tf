@@ -281,7 +281,7 @@ resource "aws_api_gateway_api_key" "this" {
   lifecycle {
     precondition {
       condition     = var.usage_plan_config != null
-      error_message = "usage_plan_config es requerido cuando enable_api_key es true. La API Key debe estar asociada a un Usage Plan para funcionar correctamente."
+      error_message = "usage_plan_config is required when enable_api_key is true. The API Key must be associated with a Usage Plan to function correctly."
     }
   }
 }
