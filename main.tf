@@ -71,7 +71,8 @@ locals {
       },
       contains(local.cors_paths, path) ? {
         options = {
-          summary = "CORS preflight"
+          summary  = "CORS preflight"
+          security = []
           responses = {
             "200" = {
               description = "CORS preflight response"
