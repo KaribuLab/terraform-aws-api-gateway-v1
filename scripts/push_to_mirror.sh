@@ -20,7 +20,26 @@ else
     git checkout -b feature/karibu-mirror
 fi
 
-# Agregar todos los archivos al staging area DESPUÉS de cambiar de rama
+# Sincronizar archivos desde el repo de GitHub (../) al subdirectorio karibu/
+echo "Syncing files from GitHub repo to karibu/terraform-aws-api-gateway-v1/"
+mkdir -p karibu/terraform-aws-api-gateway-v1
+rsync -av --delete \
+    --exclude='.git' \
+    --exclude='bitbucket-repo' \
+    --exclude='.github' \
+    --exclude='scripts' \
+    --exclude='test' \
+    --exclude='.env' \
+    --exclude='.terraform' \
+    --exclude='.terraform.lock.hcl' \
+    --exclude='.terraform.tfstate' \
+    --exclude='.terraform.tfstate.backup' \
+    --exclude='terraform.tfstate' \
+    --exclude='terraform.tfstate.backup' \
+    --exclude='terraform.tfvars' \
+    ../ karibu/terraform-aws-api-gateway-v1/
+
+# Agregar todos los archivos al staging area DESPUÉS de sincronizar
 git add --all
 curl -sL https://github.com/KaribuLab/kli/releases/download/v0.2.2/kli  --output /tmp/kli && chmod +x /tmp/kli
 commit_message=$( git log -1 --pretty=%B )

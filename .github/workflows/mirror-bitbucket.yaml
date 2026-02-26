@@ -32,28 +32,6 @@ jobs:
           # Clonar repo de Bitbucket
           git clone https://${BITBUCKET_USERNAME}:${BITBUCKET_API_TOKEN}@${BITBUCKET_REPO_URL_CLARO} bitbucket-repo
           
-      - name: Sync to karibu directory
-        run: |
-          # Crear directorio karibu si no existe
-          mkdir -p bitbucket-repo/karibu/terraform-aws-api-gateway-v1
-          
-          # Copiar contenido del repo actual al subdirectorio karibu
-          rsync -av --delete \
-            --exclude='.git' \
-            --exclude='bitbucket-repo' \
-            --exclude='.github' \
-            --exclude='scripts' \
-            --exclude='test' \
-            --exclude='.env' \
-            --exclude='.terraform' \
-            --exclude='.terraform.lock.hcl' \
-            --exclude='.terraform.tfstate' \
-            --exclude='.terraform.tfstate.backup' \
-            --exclude='terraform.tfstate' \
-            --exclude='terraform.tfstate.backup' \
-            --exclude='terraform.tfvars' \
-            ./ bitbucket-repo/karibu/terraform-aws-api-gateway-v1/
-          
       - name: Commit and push to Bitbucket
         working-directory: bitbucket-repo
         env:
