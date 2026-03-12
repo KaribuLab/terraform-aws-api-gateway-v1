@@ -61,6 +61,8 @@ module "api_gateway" {
   api_name        = var.api_name
   api_description = var.api_description
   stage_name      = "test"
+  endpoint_type   = "REGIONAL"
+  waf_web_acl_arn = aws_wafv2_web_acl.test.arn
   tags            = var.tags
 
   # Endpoint de prueba
@@ -112,12 +114,6 @@ resource "aws_wafv2_web_acl" "test" {
   }
 
   tags = var.tags
-}
-
-# Asociar WAF al stage
-resource "aws_wafv2_web_acl_association" "test" {
-  resource_arn = module.api_gateway.stage_arn
-  web_acl_arn  = aws_wafv2_web_acl.test.arn
 }
 
 variable "aws_region" {

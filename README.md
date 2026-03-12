@@ -11,13 +11,14 @@ Módulo de Terraform para crear y gestionar API Gateway REST API v1 en AWS con i
 - **CORS automático**: Habilita CORS por endpoint con configuración simple
 - **API Key y Usage Plans**: Autenticación opcional con límites de uso
 - **Method Settings**: Configuración de cache, throttling y logs por método
+- **WAFv2 opcional**: Asociación declarativa de un Web ACL al stage del API
 
 ## Requisitos
 
 - Terraform >= 1.0
 - AWS Provider >= 5.0
 - Credenciales AWS configuradas
-- Permisos IAM necesarios para crear recursos de API Gateway y Lambda
+- Permisos IAM necesarios para crear recursos de API Gateway, Lambda y WAF (si se usa)
 
 ## Uso Básico
 
@@ -127,6 +128,44 @@ module "api_gateway" {
       period = "DAY"
     }
   }
+}
+```
+
+### Con WAFv2 (Web ACL)
+
+```hcl
+resource "aws_wafv2_web_acl" "api" {
+  name  = "my-api-waf"
+  scope = "REGIONAL"
+
+  default_action {
+    allow {}
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "my-api-waf"
+    sampled_requests_enabled   = true
+  }
+}
+
+module "api_gateway" {
+  source = "github.com/KaribuLab/terraform-aws-api-gateway-v1"
+
+  aws_region      = "us-east-1"
+  api_name        = "my-api"
+  stage_name      = "prod"
+  endpoint_type   = "REGIONAL"
+  waf_web_acl_arn = aws_wafv2_web_acl.api.arn
+
+  lambda_integrations = [
+    {
+      path                = "/health"
+      method              = "GET"
+      lambda_invoke_arn   = aws_lambda_function.health.invoke_arn
+      lambda_function_arn = aws_lambda_function.health.arn
+    }
+  ]
 }
 ```
 
@@ -248,6 +287,8 @@ module "api_gateway" {
 | `api_description` | `string` | `"API Gateway managed by Terraform"` | Descripción del API |
 | `stage_name` | `string` | - | Nombre del stage (requerido) |
 | `tags` | `map(string)` | `{}` | Tags para todos los recursos |
+| `endpoint_type` | `string` | `"REGIONAL"` | Tipo de endpoint (REGIONAL, EDGE, PRIVATE) |
+| `waf_web_acl_arn` | `string` | `null` | ARN del Web ACL WAFv2 para asociar al stage (opcional, requiere `endpoint_type = "REGIONAL"`) |
 
 ### Lambda Integrations
 
@@ -295,6 +336,14 @@ module "api_gateway" {
 | `api_key_name` | `string` | `null` | Nombre de la API Key |
 | `usage_plan_config` | `object` | `null` | Configuración del Usage Plan (requerido si `enable_api_key = true`) |
 
+### WAF
+
+| Variable | Tipo | Default | Descripción |
+|----------|------|---------|-------------|
+| `waf_web_acl_arn` | `string` | `null` | ARN del Web ACL de WAFv2 para asociarlo al stage |
+
+> Nota: la asociación de WAFv2 en API Gateway REST API v1 se realiza sobre el stage y requiere `endpoint_type = "REGIONAL"`.
+
 ## Outputs
 
 | Output | Descripción |
@@ -310,6 +359,7 @@ module "api_gateway" {
 | `api_key_id` | ID de la API Key (si está habilitada) |
 | `api_key_value` | Valor de la API Key (sensible) |
 | `usage_plan_id` | ID del Usage Plan |
+| `waf_web_acl_association_id` | ID de la asociación WAFv2 al stage (si está habilitada) |
 
 ## Arquitectura Interna
 
@@ -319,8 +369,11 @@ El módulo utiliza internamente la especificación OpenAPI 3.0 para definir la A
 - Integraciones `AWS_PROXY` con Lambda
 - Security schemes para authorizers y API Keys
 - Métodos OPTIONS para CORS con integración mock
+- Endpoint configuration del API (REGIONAL/EDGE/PRIVATE)
 
 Esto permite manejar rutas anidadas de cualquier profundidad sin los ciclos de dependencia que existirían con recursos individuales de Terraform.
+
+La asociación de WAFv2 se realiza con un recurso dedicado (`aws_wafv2_web_acl_association`) y no forma parte del spec OpenAPI.
 
 ## Testing
 

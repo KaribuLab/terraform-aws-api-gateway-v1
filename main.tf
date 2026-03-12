@@ -169,7 +169,12 @@ resource "aws_api_gateway_rest_api" "this" {
   name        = var.api_name
   description = var.api_description
   body        = jsonencode(local.openapi_spec)
-  tags        = var.tags
+
+  endpoint_configuration {
+    types = [upper(var.endpoint_type)]
+  }
+
+  tags = var.tags
 }
 
 # ============================================================================
@@ -208,7 +213,11 @@ resource "aws_api_gateway_deployment" "this" {
   rest_api_id = aws_api_gateway_rest_api.this.id
 
   triggers = {
-    redeployment = sha1(jsonencode(local.openapi_spec))
+    redeployment = sha1(jsonencode({
+      openapi_spec    = local.openapi_spec
+      endpoint_type   = upper(var.endpoint_type)
+      waf_web_acl_arn = var.waf_web_acl_arn
+    }))
   }
 
   lifecycle {
@@ -242,6 +251,24 @@ resource "aws_api_gateway_stage" "this" {
   }
 
   tags = var.tags
+}
+
+# ============================================================================
+# WAFv2 association (opcional)
+# ============================================================================
+
+resource "aws_wafv2_web_acl_association" "this" {
+  count = var.waf_web_acl_arn != null ? 1 : 0
+
+  resource_arn = aws_api_gateway_stage.this.arn
+  web_acl_arn  = var.waf_web_acl_arn
+
+  lifecycle {
+    precondition {
+      condition     = upper(var.endpoint_type) == "REGIONAL"
+      error_message = "waf_web_acl_arn solo es compatible cuando endpoint_type es REGIONAL."
+    }
+  }
 }
 
 # ============================================================================

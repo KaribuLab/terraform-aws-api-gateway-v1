@@ -20,9 +20,8 @@ func TestWAF(t *testing.T) {
 		"fixtures/waf",
 		region,
 		map[string]interface{}{
-			"api_name":     testName,
-			"web_acl_name": testName + "-waf",
-			"tags":         commonTags,
+			"api_name": testName,
+			"tags":     commonTags,
 		},
 	)
 
@@ -35,6 +34,7 @@ func TestWAF(t *testing.T) {
 	stageARN := terraform.Output(t, terraformOptions, "stage_arn")
 	invokeURL := terraform.Output(t, terraformOptions, "invoke_url")
 	webACLARN := terraform.Output(t, terraformOptions, "web_acl_arn")
+	wafAssociationID := terraform.Output(t, terraformOptions, "waf_web_acl_association_id")
 
 	// Validaciones
 	assert.NotEmpty(t, restAPIID, "rest_api_id should not be empty")
@@ -45,9 +45,11 @@ func TestWAF(t *testing.T) {
 	assert.Contains(t, invokeURL, "test", "invoke_url should contain stage name")
 	assert.NotEmpty(t, webACLARN, "web_acl_arn should not be empty")
 	assert.Contains(t, webACLARN, "wafv2", "web_acl_arn should contain 'wafv2'")
+	assert.NotEmpty(t, wafAssociationID, "waf_web_acl_association_id should not be empty")
 
 	require.NotNil(t, stageName)
 	require.NotNil(t, stageARN)
 	require.NotNil(t, invokeURL)
 	require.NotNil(t, webACLARN)
+	require.NotNil(t, wafAssociationID)
 }

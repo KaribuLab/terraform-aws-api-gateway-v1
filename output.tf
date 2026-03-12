@@ -65,3 +65,8 @@ output "usage_plan_id" {
   description = "ID del Usage Plan (solo si enable_api_key y usage_plan_config están configurados)."
   value       = var.enable_api_key && var.usage_plan_config != null ? aws_api_gateway_usage_plan.this[0].id : null
 }
+
+output "waf_web_acl_association_id" {
+  description = "ID de la asociación WAFv2 con el stage (solo si waf_web_acl_arn está configurado)."
+  value       = var.waf_web_acl_arn != null ? aws_wafv2_web_acl_association.this[0].id : null
+}

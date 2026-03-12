@@ -17,3 +17,7 @@ output "invoke_url" {
 output "web_acl_arn" {
   value = aws_wafv2_web_acl.test.arn
 }
+
+output "waf_web_acl_association_id" {
+  value = module.api_gateway.waf_web_acl_association_id
+}

@@ -24,6 +24,23 @@ variable "tags" {
   default     = {}
 }
 
+variable "endpoint_type" {
+  description = "Tipo de endpoint del API Gateway REST API (REGIONAL, EDGE, PRIVATE)."
+  type        = string
+  default     = "REGIONAL"
+
+  validation {
+    condition     = contains(["REGIONAL", "EDGE", "PRIVATE"], upper(var.endpoint_type))
+    error_message = "endpoint_type debe ser REGIONAL, EDGE o PRIVATE."
+  }
+}
+
+variable "waf_web_acl_arn" {
+  description = "ARN del Web ACL de AWS WAFv2 para asociarlo al stage del API Gateway (opcional). Requiere endpoint_type = REGIONAL."
+  type        = string
+  default     = null
+}
+
 # ============================================================================
 # Integraciones Lambda
 # ============================================================================
