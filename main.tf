@@ -8,6 +8,12 @@ terraform {
 }
 
 # ============================================================================
+# Data sources
+# ============================================================================
+
+data "aws_caller_identity" "current" {}
+
+# ============================================================================
 # Locals: Generar spec OpenAPI a partir de lambda_integrations y authorizers
 # ============================================================================
 
@@ -32,6 +38,17 @@ locals {
       : i.api_key_required
       ? [{ api_key = [] }]
       : []
+    )
+  }
+
+  # Construir URI de integración Lambda (directo o con stage variable)
+  # Cuando se usa lambda_alias_variable, la URI incluye ${stageVariables.<var>} que API Gateway resuelve en runtime
+  integration_uris = {
+    for i in var.lambda_integrations :
+    "${i.path}:${i.method}" => (
+      i.lambda_alias_variable != null
+      ? "arn:aws:apigateway:${var.aws_region}:lambda:path/2015-03-31/functions/${i.lambda_function_arn}:${"$"}{stageVariables.${i.lambda_alias_variable}}/invocations"
+      : i.lambda_invoke_arn
     )
   }
 
@@ -60,7 +77,7 @@ locals {
             x-amazon-apigateway-integration = {
               type                = "aws_proxy"
               httpMethod          = "POST"
-              uri                 = i.lambda_invoke_arn
+              uri                 = local.integration_uris["${i.path}:${i.method}"]
               passthroughBehavior = "when_no_match"
             }
           },
@@ -206,148 +223,48 @@ resource "aws_lambda_permission" "authorizer" {
 }
 
 # ============================================================================
-# Deployment
+# Stage Module (Deployment, Stage, Method Settings, WAF, API Key, Usage Plan)
 # ============================================================================
 
-resource "aws_api_gateway_deployment" "this" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
+locals {
+  openapi_spec_sha = sha1(jsonencode({
+    openapi_spec    = local.openapi_spec
+    endpoint_type   = upper(var.endpoint_type)
+    waf_web_acl_arn = var.waf_web_acl_arn
+  }))
 
-  triggers = {
-    redeployment = sha1(jsonencode({
-      openapi_spec    = local.openapi_spec
-      endpoint_type   = upper(var.endpoint_type)
-      waf_web_acl_arn = var.waf_web_acl_arn
-    }))
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
+  api_key_config = var.enable_api_key ? {
+    name        = var.api_key_name
+    description = var.api_key_description
+    usage_plan  = var.usage_plan_config
+  } : null
 }
 
-# ============================================================================
-# Stage
-# ============================================================================
+module "stage" {
+  count  = var.create_stage ? 1 : 0
+  source = "./modules/stage"
 
-resource "aws_api_gateway_stage" "this" {
-  rest_api_id   = aws_api_gateway_rest_api.this.id
-  deployment_id = aws_api_gateway_deployment.this.id
-  stage_name    = var.stage_name
-  description   = var.stage_description
+  rest_api_id          = aws_api_gateway_rest_api.this.id
+  rest_api_execution_arn = aws_api_gateway_rest_api.this.execution_arn
+  tags                 = var.tags
+  endpoint_type        = var.endpoint_type
+  openapi_spec_sha     = local.openapi_spec_sha
 
-  variables = var.stage_variables
-
+  # Stage settings
+  stage_name           = var.stage_name
+  stage_description    = var.stage_description
+  stage_variables      = var.stage_variables
   cache_cluster_enabled = var.cache_cluster_enabled
-  cache_cluster_size    = var.cache_cluster_enabled ? var.cache_cluster_size : null
-
+  cache_cluster_size   = var.cache_cluster_size
   xray_tracing_enabled = var.xray_tracing_enabled
+  access_log_settings  = var.access_log_settings
 
-  dynamic "access_log_settings" {
-    for_each = var.access_log_settings != null ? [1] : []
-    content {
-      destination_arn = var.access_log_settings.destination_arn
-      format          = var.access_log_settings.format
-    }
-  }
+  # Method settings
+  method_settings = var.method_settings
 
-  tags = var.tags
-}
+  # WAF
+  waf_web_acl_arn = var.waf_web_acl_arn
 
-# ============================================================================
-# WAFv2 association (opcional)
-# ============================================================================
-
-resource "aws_wafv2_web_acl_association" "this" {
-  count = var.waf_web_acl_arn != null ? 1 : 0
-
-  resource_arn = aws_api_gateway_stage.this.arn
-  web_acl_arn  = var.waf_web_acl_arn
-
-  lifecycle {
-    precondition {
-      condition     = upper(var.endpoint_type) == "REGIONAL"
-      error_message = "waf_web_acl_arn solo es compatible cuando endpoint_type es REGIONAL."
-    }
-  }
-}
-
-# ============================================================================
-# Method Settings (cache, throttling, logs por método)
-# ============================================================================
-
-resource "aws_api_gateway_method_settings" "this" {
-  for_each = var.method_settings
-
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  stage_name  = aws_api_gateway_stage.this.stage_name
-  method_path = each.key
-
-  settings {
-    metrics_enabled        = each.value.metrics_enabled
-    logging_level          = each.value.logging_level
-    data_trace_enabled     = each.value.data_trace_enabled
-    throttling_burst_limit = each.value.throttling_burst_limit
-    throttling_rate_limit  = each.value.throttling_rate_limit
-    caching_enabled        = each.value.caching_enabled
-    cache_ttl_in_seconds   = each.value.cache_ttl_in_seconds
-    cache_data_encrypted   = each.value.cache_data_encrypted
-  }
-}
-
-# ============================================================================
-# API Key y Usage Plan (opcional)
-# ============================================================================
-
-resource "aws_api_gateway_api_key" "this" {
-  count = var.enable_api_key ? 1 : 0
-
-  name        = var.api_key_name != null ? var.api_key_name : "${var.api_name}-key"
-  description = var.api_key_description
-  enabled     = true
-  tags        = var.tags
-
-  lifecycle {
-    precondition {
-      condition     = var.usage_plan_config != null
-      error_message = "usage_plan_config is required when enable_api_key is true. The API Key must be associated with a Usage Plan to function correctly."
-    }
-  }
-}
-
-resource "aws_api_gateway_usage_plan" "this" {
-  count = var.enable_api_key && var.usage_plan_config != null ? 1 : 0
-
-  name        = var.usage_plan_config.name
-  description = var.usage_plan_config.description
-
-  dynamic "quota_settings" {
-    for_each = var.usage_plan_config.quota_settings != null ? [1] : []
-    content {
-      limit  = var.usage_plan_config.quota_settings.limit
-      period = var.usage_plan_config.quota_settings.period
-    }
-  }
-
-  dynamic "throttle_settings" {
-    for_each = var.usage_plan_config.throttle_settings != null ? [1] : []
-    content {
-      burst_limit = var.usage_plan_config.throttle_settings.burst_limit
-      rate_limit  = var.usage_plan_config.throttle_settings.rate_limit
-    }
-  }
-
-  api_stages {
-    api_id = aws_api_gateway_rest_api.this.id
-    stage  = aws_api_gateway_stage.this.stage_name
-  }
-
-  tags = var.tags
-}
-
-resource "aws_api_gateway_usage_plan_key" "this" {
-  count = var.enable_api_key && var.usage_plan_config != null ? 1 : 0
-
-  key_id        = aws_api_gateway_api_key.this[0].id
-  key_type      = "API_KEY"
-  usage_plan_id = aws_api_gateway_usage_plan.this[0].id
+  # API Key and Usage Plan
+  api_key_config = local.api_key_config
 }

@@ -53,8 +53,9 @@ variable "lambda_integrations" {
     Campos:
     - path: Ruta completa del endpoint (ej: "/users", "/profile/{id}", "/profile/{id}/orders")
     - method: Método HTTP (GET, POST, PUT, DELETE, PATCH, HEAD, ANY)
-    - lambda_invoke_arn: ARN de invocación de la función Lambda
+    - lambda_invoke_arn: ARN de invocación de la función Lambda (requerido si no se usa lambda_alias_variable)
     - lambda_function_arn: ARN de la función Lambda (para permisos de invocación)
+    - lambda_alias_variable: Nombre de la variable de stage que contiene el alias (ej: "lambda_alias"). Si se especifica, la URI usara la sintaxis de stageVariables para invocar el alias correspondiente.
     - authorization_type: Tipo de autorización (NONE, CUSTOM). Default: NONE
     - authorizer_key: Clave del authorizer en var.authorizers (requerido si authorization_type = CUSTOM)
     - api_key_required: Si requiere API Key. Default: false
@@ -64,17 +65,18 @@ variable "lambda_integrations" {
     - cors_allow_methods: Métodos permitidos en CORS (se genera automáticamente si no se especifica)
   EOT
   type = list(object({
-    path                = string
-    method              = string
-    lambda_invoke_arn   = string
-    lambda_function_arn = string
-    authorization_type  = optional(string, "NONE")
-    authorizer_key      = optional(string, null)
-    api_key_required    = optional(bool, false)
-    enable_cors         = optional(bool, false)
-    cors_allow_origin   = optional(string, "'*'")
-    cors_allow_headers  = optional(string, "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'")
-    cors_allow_methods  = optional(string, null)
+    path                  = string
+    method                = string
+    lambda_invoke_arn     = optional(string, null)
+    lambda_function_arn   = string
+    lambda_alias_variable = optional(string, null)
+    authorization_type    = optional(string, "NONE")
+    authorizer_key        = optional(string, null)
+    api_key_required      = optional(bool, false)
+    enable_cors           = optional(bool, false)
+    cors_allow_origin     = optional(string, "'*'")
+    cors_allow_headers    = optional(string, "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'")
+    cors_allow_methods    = optional(string, null)
   }))
   default = []
 
@@ -100,6 +102,14 @@ variable "lambda_integrations" {
       i.authorization_type != "CUSTOM" || i.authorizer_key != null
     ])
     error_message = "Cuando authorization_type es CUSTOM, authorizer_key es requerido."
+  }
+
+  validation {
+    condition = alltrue([
+      for i in var.lambda_integrations :
+      (i.lambda_invoke_arn != null) != (i.lambda_alias_variable != null)
+    ])
+    error_message = "Debe especificar lambda_invoke_arn O lambda_alias_variable, pero no ambos ni ninguno."
   }
 }
 
@@ -195,6 +205,16 @@ variable "method_settings" {
     cache_data_encrypted   = optional(bool, false)
   }))
   default = {}
+}
+
+# ============================================================================
+# Control de creación del Stage
+# ============================================================================
+
+variable "create_stage" {
+  description = "Crear el stage y recursos asociados (deployment, method settings, WAF, etc.). Si es false, solo se crea el API REST y permisos Lambda."
+  type        = bool
+  default     = true
 }
 
 # ============================================================================
