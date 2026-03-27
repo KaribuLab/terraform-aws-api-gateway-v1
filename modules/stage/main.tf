@@ -103,20 +103,20 @@ locals {
 resource "aws_api_gateway_api_key" "this" {
   count = local.enable_api_key ? 1 : 0
 
-  name        = var.api_key_config.name != null ? var.api_key_config.name : "${var.stage_name}-api-key"
-  description = var.api_key_config.description
+  name        = try(var.api_key_config.name, null) != null ? var.api_key_config.name : "${var.stage_name}-api-key"
+  description = try(var.api_key_config.description, "API Key managed by Terraform")
   enabled     = true
   tags        = var.tags
 }
 
 resource "aws_api_gateway_usage_plan" "this" {
-  count = local.enable_api_key && var.api_key_config.usage_plan != null ? 1 : 0
+  count = try(var.api_key_config.usage_plan, null) != null ? 1 : 0
 
   name        = var.api_key_config.usage_plan.name
   description = var.api_key_config.usage_plan.description
 
   dynamic "quota_settings" {
-    for_each = var.api_key_config.usage_plan.quota_settings != null ? [1] : []
+    for_each = try(var.api_key_config.usage_plan.quota_settings, null) != null ? [1] : []
     content {
       limit  = var.api_key_config.usage_plan.quota_settings.limit
       period = var.api_key_config.usage_plan.quota_settings.period
@@ -124,7 +124,7 @@ resource "aws_api_gateway_usage_plan" "this" {
   }
 
   dynamic "throttle_settings" {
-    for_each = var.api_key_config.usage_plan.throttle_settings != null ? [1] : []
+    for_each = try(var.api_key_config.usage_plan.throttle_settings, null) != null ? [1] : []
     content {
       burst_limit = var.api_key_config.usage_plan.throttle_settings.burst_limit
       rate_limit  = var.api_key_config.usage_plan.throttle_settings.rate_limit
@@ -140,7 +140,7 @@ resource "aws_api_gateway_usage_plan" "this" {
 }
 
 resource "aws_api_gateway_usage_plan_key" "this" {
-  count = local.enable_api_key && var.api_key_config.usage_plan != null ? 1 : 0
+  count = try(var.api_key_config.usage_plan, null) != null ? 1 : 0
 
   key_id        = aws_api_gateway_api_key.this[0].id
   key_type      = "API_KEY"

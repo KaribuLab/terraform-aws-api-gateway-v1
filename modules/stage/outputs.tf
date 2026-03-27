@@ -40,7 +40,7 @@ output "api_key_value" {
 
 output "usage_plan_id" {
   description = "ID del Usage Plan (solo si api_key_config y usage_plan están configurados)."
-  value       = local.enable_api_key && var.api_key_config.usage_plan != null ? aws_api_gateway_usage_plan.this[0].id : null
+  value       = try(var.api_key_config.usage_plan, null) != null ? aws_api_gateway_usage_plan.this[0].id : null
 }
 
 output "waf_web_acl_association_id" {
