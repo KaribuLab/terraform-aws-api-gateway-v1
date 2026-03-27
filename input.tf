@@ -146,8 +146,14 @@ variable "authorizers" {
 # ============================================================================
 
 variable "stage_name" {
-  description = "Nombre del stage (ej: 'dev', 'staging', 'prod')."
+  description = "Nombre del stage (ej: 'dev', 'staging', 'prod'). Requerido si create_stage es true."
   type        = string
+  default     = null
+
+  validation {
+    condition     = var.create_stage == false || var.stage_name != null
+    error_message = "stage_name es requerido cuando create_stage es true."
+  }
 }
 
 variable "stage_description" {
