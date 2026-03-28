@@ -93,13 +93,13 @@ inputs = {
   api_name    = "my-api"
   create_stage = false  # Solo crea el API REST, no el stage
 
-  # Usa lambda_alias_variable para invocar diferentes aliases por stage
+  # Mezcla de integraciones: algunas con alias (via stage variable), otras sin alias (directo)
   lambda_integrations = [
     {
       path                  = "/users"
       method                = "GET"
       lambda_function_arn   = "arn:aws:lambda:us-east-1:123456789012:function:get-users"
-      lambda_alias_variable = "lambda_alias"  # Usa stage variable
+      lambda_alias_variable = "lambda_alias"  # Usa stage variable para el alias
     },
     {
       path                  = "/users"
@@ -107,6 +107,13 @@ inputs = {
       lambda_function_arn   = "arn:aws:lambda:us-east-1:123456789012:function:create-user"
       lambda_alias_variable = "lambda_alias"
       enable_cors           = true
+    },
+    {
+      path                = "/health"
+      method              = "GET"
+      lambda_function_arn = "arn:aws:lambda:us-east-1:123456789012:function:healthcheck"
+      lambda_invoke_arn   = "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:123456789012:function:healthcheck/invocations"
+      # Sin alias: invoca $LATEST directamente
     }
   ]
 
