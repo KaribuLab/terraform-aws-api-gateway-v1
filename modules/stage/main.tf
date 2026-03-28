@@ -116,9 +116,9 @@ locals {
     for idx, integration in local.lambda_integrations :
     idx => {
       function_arn = integration.lambda_function_arn
-      qualifier    = var.stage_variables[integration.lambda_alias_variable]
+      qualifier    = try(var.stage_variables[integration.lambda_alias_variable], null)
     }
-    if try(integration.lambda_alias_variable, null) != null && contains(keys(var.stage_variables), integration.lambda_alias_variable)
+    if try(contains(keys(var.stage_variables), integration.lambda_alias_variable), false)
   }
 }
 
