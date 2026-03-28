@@ -244,20 +244,20 @@ module "stage" {
   count  = var.create_stage ? 1 : 0
   source = "./modules/stage"
 
-  rest_api_id          = aws_api_gateway_rest_api.this.id
+  rest_api_id            = aws_api_gateway_rest_api.this.id
   rest_api_execution_arn = aws_api_gateway_rest_api.this.execution_arn
-  tags                 = var.tags
-  endpoint_type        = var.endpoint_type
-  openapi_spec_sha     = local.openapi_spec_sha
+  tags                   = var.tags
+  endpoint_type          = var.endpoint_type
+  openapi_spec_sha       = local.openapi_spec_sha
 
   # Stage settings
-  stage_name           = var.stage_name
-  stage_description    = var.stage_description
-  stage_variables      = var.stage_variables
+  stage_name            = var.stage_name
+  stage_description     = var.stage_description
+  stage_variables       = var.stage_variables
   cache_cluster_enabled = var.cache_cluster_enabled
-  cache_cluster_size   = var.cache_cluster_size
-  xray_tracing_enabled = var.xray_tracing_enabled
-  access_log_settings  = var.access_log_settings
+  cache_cluster_size    = var.cache_cluster_size
+  xray_tracing_enabled  = var.xray_tracing_enabled
+  access_log_settings   = var.access_log_settings
 
   # Method settings
   method_settings = var.method_settings
@@ -267,4 +267,13 @@ module "stage" {
 
   # API Key and Usage Plan
   api_key_config = local.api_key_config
+
+  # Lambda integrations with aliases (for permissions)
+  lambda_integrations = [
+    for i in var.lambda_integrations : {
+      lambda_function_arn   = i.lambda_function_arn
+      lambda_alias_variable = i.lambda_alias_variable
+    }
+    if i.lambda_alias_variable != null
+  ]
 }

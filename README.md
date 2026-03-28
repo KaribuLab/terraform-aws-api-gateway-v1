@@ -260,6 +260,22 @@ cd live && terragrunt run-all apply
 
 ## Ejemplos Adicionales
 
+### Multi-Stage con Lambda Aliases
+
+Ver [examples/multi-stage/](examples/multi-stage/) para un ejemplo completo de un API Gateway con múltiples stages (dev y staging), donde cada stage invoca un alias diferente de la misma función Lambda.
+
+```bash
+cd examples/multi-stage
+terraform init
+terraform apply
+```
+
+Este ejemplo demuestra:
+- Crear un API Gateway sin stage (`create_stage = false`)
+- Crear dos stages usando el submódulo `modules/stage`
+- Cada stage con su propio alias Lambda (dev vs staging)
+- Permisos de invocación por alias (en el ejemplo con `aws_lambda_permission`; en Terragrunt puedes usar en su lugar `lambda_integrations` en el submódulo `stage`)
+
 ### Con Lambda Authorizer
 
 ```hcl
@@ -473,6 +489,7 @@ El módulo incluye un submódulo `modules/stage` que permite crear stages indepe
 | `waf_web_acl_arn` | `string` | `null` | ARN del Web ACL para asociar |
 | `api_key_config` | `object` | `null` | Configuración de API Key y Usage Plan |
 | `method_settings` | `map(object)` | `{}` | Configuración por método |
+| `lambda_integrations` | `list(object)` | `[]` | Integraciones Lambda que usan alias. Crea permisos con el qualifier del alias extraído de `stage_variables` |
 
 ### Ejemplo de Uso del Submódulo
 
@@ -480,14 +497,26 @@ El módulo incluye un submódulo `modules/stage` que permite crear stages indepe
 module "stage_dev" {
   source = "github.com/KaribuLab/terraform-aws-api-gateway-v1//modules/stage"
 
-  rest_api_id            = aws_api_gateway_rest_api.my_api.id
-  rest_api_execution_arn = aws_api_gateway_rest_api.my_api.execution_arn
-  openapi_spec_sha       = sha1(jsonencode(local.openapi_spec))
+  rest_api_id            = dependency.apigateway.outputs.rest_api_id
+  rest_api_execution_arn = dependency.apigateway.outputs.rest_api_execution_arn
+  openapi_spec_sha       = dependency.apigateway.outputs.openapi_spec_sha
 
   stage_name = "dev"
   stage_variables = {
     lambda_alias = "dev"
   }
+
+  # Crear permisos Lambda para el alias dev
+  lambda_integrations = [
+    {
+      lambda_function_arn   = "arn:aws:lambda:us-east-1:123456789012:function:get-users"
+      lambda_alias_variable = "lambda_alias"
+    },
+    {
+      lambda_function_arn   = "arn:aws:lambda:us-east-1:123456789012:function:create-user"
+      lambda_alias_variable = "lambda_alias"
+    }
+  ]
 }
 ```
 

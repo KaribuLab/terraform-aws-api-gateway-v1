@@ -136,3 +136,21 @@ variable "api_key_config" {
   })
   default = null
 }
+
+# ============================================================================
+# Permisos Lambda para aliases (opcional)
+# ============================================================================
+
+variable "lambda_integrations" {
+  description = <<-EOT
+    Lista de integraciones Lambda que usan alias via stage variables.
+    Se usa para crear permisos de invocacion con el qualifier del alias.
+    Cada integracion debe especificar el ARN de la funcion y el nombre de la
+    stage variable que contiene el alias.
+  EOT
+  type = list(object({
+    lambda_function_arn   = string
+    lambda_alias_variable = string
+  }))
+  default = []
+}

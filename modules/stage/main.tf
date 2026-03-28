@@ -28,10 +28,10 @@ resource "aws_api_gateway_deployment" "this" {
 # ============================================================================
 
 resource "aws_api_gateway_stage" "this" {
-  rest_api_id   = var.rest_api_id
-  deployment_id = aws_api_gateway_deployment.this.id
-  stage_name    = var.stage_name
-  description   = var.stage_description
+  rest_api_id     = var.rest_api_id
+  deployment_id   = aws_api_gateway_deployment.this.id
+  stage_name      = var.stage_name
+  description     = var.stage_description
 
   variables = var.stage_variables
 
@@ -98,6 +98,15 @@ resource "aws_api_gateway_method_settings" "this" {
 
 locals {
   enable_api_key = var.api_key_config != null
+
+  alias_permissions = {
+    for idx, integration in var.lambda_integrations :
+    idx => {
+      function_arn = integration.lambda_function_arn
+      qualifier    = var.stage_variables[integration.lambda_alias_variable]
+    }
+    if contains(keys(var.stage_variables), integration.lambda_alias_variable)
+  }
 }
 
 resource "aws_api_gateway_api_key" "this" {
@@ -142,7 +151,22 @@ resource "aws_api_gateway_usage_plan" "this" {
 resource "aws_api_gateway_usage_plan_key" "this" {
   count = try(var.api_key_config.usage_plan, null) != null ? 1 : 0
 
-  key_id        = aws_api_gateway_api_key.this[0].id
-  key_type      = "API_KEY"
-  usage_plan_id = aws_api_gateway_usage_plan.this[0].id
+  key_id         = aws_api_gateway_api_key.this[0].id
+  key_type       = "API_KEY"
+  usage_plan_id  = aws_api_gateway_usage_plan.this[0].id
+}
+
+# ============================================================================
+# Permisos Lambda para aliases (opcional)
+# ============================================================================
+
+resource "aws_lambda_permission" "alias" {
+  for_each = local.alias_permissions
+
+  statement_id  = "AllowAPIGatewayInvoke-${var.stage_name}-${each.key}"
+  action        = "lambda:InvokeFunction"
+  function_name = each.value.function_arn
+  qualifier     = each.value.qualifier
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${var.rest_api_execution_arn}/*/*"
 }
