@@ -147,10 +147,18 @@ variable "lambda_integrations" {
     Se usa para crear permisos de invocacion con el qualifier del alias.
     Cada integracion debe especificar el ARN de la funcion y el nombre de la
     stage variable que contiene el alias.
+
+    Tipo `any` (lista): permite omitir `lambda_alias_variable` en JSON (TF_VAR_lambda_integrations,
+    Terragrunt); las entradas sin alias no generan permiso en este modulo.
   EOT
-  type = list(object({
-    lambda_function_arn   = string
-    lambda_alias_variable = string
-  }))
+  type    = any
   default = []
+
+  validation {
+    condition = alltrue([
+      for i in var.lambda_integrations :
+      try(i.lambda_function_arn, null) != null
+    ]) || length(var.lambda_integrations) == 0
+    error_message = "Cada elemento de lambda_integrations debe incluir lambda_function_arn cuando la lista no esta vacia."
+  }
 }

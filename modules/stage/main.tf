@@ -1,4 +1,6 @@
 terraform {
+  required_version = ">= 1.5.0"
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -97,15 +99,26 @@ resource "aws_api_gateway_method_settings" "this" {
 # ============================================================================
 
 locals {
+  # Compatible con TF_VAR_* (JSON): claves opcionales omitidas se rellenan aqui.
+  lambda_integrations = [
+    for i in var.lambda_integrations : merge(
+      {
+        lambda_function_arn   = null
+        lambda_alias_variable = null
+      },
+      i
+    )
+  ]
+
   enable_api_key = var.api_key_config != null
 
   alias_permissions = {
-    for idx, integration in var.lambda_integrations :
+    for idx, integration in local.lambda_integrations :
     idx => {
       function_arn = integration.lambda_function_arn
       qualifier    = var.stage_variables[integration.lambda_alias_variable]
     }
-    if contains(keys(var.stage_variables), integration.lambda_alias_variable)
+    if try(integration.lambda_alias_variable, null) != null && contains(keys(var.stage_variables), integration.lambda_alias_variable)
   }
 }
 

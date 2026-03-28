@@ -499,7 +499,7 @@ El módulo incluye un submódulo `modules/stage` que permite crear stages indepe
 | `waf_web_acl_arn` | `string` | `null` | ARN del Web ACL para asociar |
 | `api_key_config` | `object` | `null` | Configuración de API Key y Usage Plan |
 | `method_settings` | `map(object)` | `{}` | Configuración por método |
-| `lambda_integrations` | `list(object)` | `[]` | Integraciones Lambda que usan alias. Crea permisos con el qualifier del alias extraído de `stage_variables` |
+| `lambda_integrations` | `any` (lista) | `[]` | Integraciones para permisos por alias; ver subsección. Compatible con `TF_VAR_*` omitiendo `lambda_alias_variable` |
 
 ### Ejemplo de Uso del Submódulo
 
