@@ -63,27 +63,17 @@ variable "lambda_integrations" {
     - cors_allow_origin: Valor de Access-Control-Allow-Origin. Default: "'*'"
     - cors_allow_headers: Headers permitidos en CORS. Default: estándar
     - cors_allow_methods: Métodos permitidos en CORS (se genera automáticamente si no se especifica)
+
+    Tipo `any` (lista de mapas/objetos): permite omitir claves opcionales al usar TF_VAR_lambda_integrations (JSON)
+    o Terragrunt; el modulo rellena valores por defecto antes de usarlas.
   EOT
-  type = list(object({
-    path                  = string
-    method                = string
-    lambda_invoke_arn     = optional(string, null)
-    lambda_function_arn   = string
-    lambda_alias_variable = optional(string, null)
-    authorization_type    = optional(string, "NONE")
-    authorizer_key        = optional(string, null)
-    api_key_required      = optional(bool, false)
-    enable_cors           = optional(bool, false)
-    cors_allow_origin     = optional(string, "'*'")
-    cors_allow_headers    = optional(string, "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'")
-    cors_allow_methods    = optional(string, null)
-  }))
+  type    = any
   default = []
 
   validation {
     condition = alltrue([
       for i in var.lambda_integrations :
-      contains(["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "ANY"], i.method)
+      contains(["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "ANY"], try(i.method, ""))
     ])
     error_message = "El método HTTP debe ser uno de: GET, POST, PUT, DELETE, PATCH, HEAD, ANY."
   }
@@ -91,7 +81,7 @@ variable "lambda_integrations" {
   validation {
     condition = alltrue([
       for i in var.lambda_integrations :
-      contains(["NONE", "CUSTOM"], i.authorization_type)
+      contains(["NONE", "CUSTOM"], coalesce(try(i.authorization_type, null), "NONE"))
     ])
     error_message = "authorization_type debe ser NONE o CUSTOM."
   }
@@ -99,7 +89,7 @@ variable "lambda_integrations" {
   validation {
     condition = alltrue([
       for i in var.lambda_integrations :
-      i.authorization_type != "CUSTOM" || i.authorizer_key != null
+      coalesce(try(i.authorization_type, null), "NONE") != "CUSTOM" || try(i.authorizer_key, null) != null
     ])
     error_message = "Cuando authorization_type es CUSTOM, authorizer_key es requerido."
   }
@@ -107,9 +97,17 @@ variable "lambda_integrations" {
   validation {
     condition = alltrue([
       for i in var.lambda_integrations :
-      (i.lambda_invoke_arn != null) != (i.lambda_alias_variable != null)
+      (try(i.lambda_invoke_arn, null) != null) != (try(i.lambda_alias_variable, null) != null)
     ])
     error_message = "Debe especificar lambda_invoke_arn O lambda_alias_variable, pero no ambos ni ninguno."
+  }
+
+  validation {
+    condition = alltrue([
+      for i in var.lambda_integrations :
+      try(i.path, null) != null && try(i.lambda_function_arn, null) != null
+    ])
+    error_message = "Cada integracion requiere path y lambda_function_arn."
   }
 }
 

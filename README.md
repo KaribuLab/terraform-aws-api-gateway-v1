@@ -399,6 +399,7 @@ module "api_gateway" {
 | `endpoint_type` | `string` | `"REGIONAL"` | Tipo de endpoint (REGIONAL, EDGE, PRIVATE) |
 | `waf_web_acl_arn` | `string` | `null` | ARN del Web ACL WAFv2 para asociar al stage (opcional, requiere `endpoint_type = "REGIONAL"`) |
 | `create_stage` | `bool` | `true` | Si es `false`, solo crea el API REST sin stage (útil para separar en múltiples states) |
+| `lambda_integrations` | `any` (lista) | `[]` | Lista de integraciones; ver tabla siguiente. Compatible con `TF_VAR_lambda_integrations` (JSON) omitiendo claves opcionales |
 
 ### Lambda Integrations
 
@@ -418,6 +419,8 @@ module "api_gateway" {
 | `cors_allow_methods` | `string` | auto-generado | Métodos permitidos en CORS |
 
 **Nota:** Debe especificar exactamente uno de `lambda_invoke_arn` o `lambda_alias_variable`, pero no ambos.
+
+**Nota (TF_VAR / Terragrunt):** Puedes omitir en JSON la clave que no uses (por ejemplo solo `lambda_invoke_arn` sin `lambda_alias_variable`); el modulo rellena el resto con valores por defecto antes de validar y generar el spec.
 
 ### Authorizers
 

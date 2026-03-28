@@ -1,4 +1,6 @@
 terraform {
+  required_version = ">= 1.5.0"
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -18,18 +20,37 @@ data "aws_caller_identity" "current" {}
 # ============================================================================
 
 locals {
+  # Rellena claves opcionales para compatibilidad con TF_VAR_* (JSON) y Terragrunt,
+  # donde a veces no se aplican defaults de optional() en list(object(...)).
+  lambda_integrations = [
+    for i in var.lambda_integrations : merge(
+      {
+        lambda_invoke_arn     = null
+        lambda_alias_variable = null
+        authorization_type    = "NONE"
+        authorizer_key        = null
+        api_key_required      = false
+        enable_cors           = false
+        cors_allow_origin     = "'*'"
+        cors_allow_headers    = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        cors_allow_methods    = null
+      },
+      i
+    )
+  ]
+
   integrations_by_path = {
-    for path in distinct([for i in var.lambda_integrations : i.path]) :
-    path => [for i in var.lambda_integrations : i if i.path == path]
+    for path in distinct([for i in local.lambda_integrations : i.path]) :
+    path => [for i in local.lambda_integrations : i if i.path == path]
   }
 
   cors_paths = toset([
-    for i in var.lambda_integrations : i.path if i.enable_cors
+    for i in local.lambda_integrations : i.path if i.enable_cors
   ])
 
   # Construir security list por integración
   integration_security = {
-    for i in var.lambda_integrations :
+    for i in local.lambda_integrations :
     "${i.path}:${i.method}" => (
       i.authorization_type == "CUSTOM" && i.api_key_required
       ? [{ (i.authorizer_key) = [], api_key = [] }]
@@ -44,7 +65,7 @@ locals {
   # Construir URI de integración Lambda (directo o con stage variable)
   # Cuando se usa lambda_alias_variable, la URI incluye ${stageVariables.<var>} que API Gateway resuelve en runtime
   integration_uris = {
-    for i in var.lambda_integrations :
+    for i in local.lambda_integrations :
     "${i.path}:${i.method}" => (
       i.lambda_alias_variable != null
       ? "arn:aws:apigateway:${var.aws_region}:lambda:path/2015-03-31/functions/${i.lambda_function_arn}:${"$"}{stageVariables.${i.lambda_alias_variable}}/invocations"
@@ -173,7 +194,7 @@ locals {
   )
 
   lambda_permission_keys = {
-    for i in var.lambda_integrations :
+    for i in local.lambda_integrations :
     "${replace(trimprefix(i.path, "/"), "/", "-")}-${i.method}" => i
   }
 }
@@ -270,7 +291,7 @@ module "stage" {
 
   # Lambda integrations with aliases (for permissions)
   lambda_integrations = [
-    for i in var.lambda_integrations : {
+    for i in local.lambda_integrations : {
       lambda_function_arn   = i.lambda_function_arn
       lambda_alias_variable = i.lambda_alias_variable
     }
