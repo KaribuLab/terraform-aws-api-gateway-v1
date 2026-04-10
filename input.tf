@@ -41,6 +41,21 @@ variable "waf_web_acl_arn" {
   default     = null
 }
 
+variable "lambda_permission_statement_id_suffix" {
+  description = <<-EOT
+    Sufijo opcional para los statement_id de aws_lambda_permission (integraciones, authorizers y permisos por alias en el submódulo stage).
+
+    En Lambda, StatementId debe ser único por función. Si la misma Lambda se integra en más de un API Gateway REST y comparten path+método (o mismas claves de authorizer / mismo stage_name e índice de alias), sin sufijo distinto por stack obtendrás ResourceConflictException (409).
+
+    Usa un valor estable y distinto por API (ej. nombre corto del API). Solo caracteres válidos para StatementId de Lambda (recomendado: letras, números, guiones; longitud total del id ≤ 100 caracteres).
+
+    null o cadena vacía: mismo comportamiento que antes (sin sufijo).
+  EOT
+  type        = string
+  default     = null
+  nullable    = true
+}
+
 # ============================================================================
 # Integraciones Lambda
 # ============================================================================
@@ -67,8 +82,8 @@ variable "lambda_integrations" {
     Tipo `any` (lista de mapas/objetos): permite omitir claves opcionales al usar TF_VAR_lambda_integrations (JSON)
     o Terragrunt; el modulo rellena valores por defecto antes de usarlas.
   EOT
-  type    = any
-  default = []
+  type        = any
+  default     = []
 
   validation {
     condition = alltrue([

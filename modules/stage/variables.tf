@@ -151,8 +151,8 @@ variable "lambda_integrations" {
     Tipo `any` (lista): permite omitir `lambda_alias_variable` en JSON (TF_VAR_lambda_integrations,
     Terragrunt); las entradas sin alias no generan permiso en este modulo.
   EOT
-  type    = any
-  default = []
+  type        = any
+  default     = []
 
   validation {
     condition = alltrue([
@@ -161,4 +161,14 @@ variable "lambda_integrations" {
     ]) || length(var.lambda_integrations) == 0
     error_message = "Cada elemento de lambda_integrations debe incluir lambda_function_arn cuando la lista no esta vacia."
   }
+}
+
+variable "lambda_permission_statement_id_suffix" {
+  description = <<-EOT
+    Sufijo opcional para el statement_id de aws_lambda_permission.alias.
+    Debe coincidir con el del modulo raiz cuando ambos gestionan la misma Lambda en APIs distintos (StatementId unico por funcion).
+  EOT
+  type        = string
+  default     = null
+  nullable    = true
 }

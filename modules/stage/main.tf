@@ -30,10 +30,10 @@ resource "aws_api_gateway_deployment" "this" {
 # ============================================================================
 
 resource "aws_api_gateway_stage" "this" {
-  rest_api_id     = var.rest_api_id
-  deployment_id   = aws_api_gateway_deployment.this.id
-  stage_name      = var.stage_name
-  description     = var.stage_description
+  rest_api_id   = var.rest_api_id
+  deployment_id = aws_api_gateway_deployment.this.id
+  stage_name    = var.stage_name
+  description   = var.stage_description
 
   variables = var.stage_variables
 
@@ -110,6 +110,12 @@ locals {
     )
   ]
 
+  lambda_permission_statement_id_suffix_fragment = (
+    var.lambda_permission_statement_id_suffix != null && trimspace(var.lambda_permission_statement_id_suffix) != ""
+    ? "-${trimspace(var.lambda_permission_statement_id_suffix)}"
+    : ""
+  )
+
   enable_api_key = var.api_key_config != null
 
   alias_permissions = {
@@ -164,9 +170,9 @@ resource "aws_api_gateway_usage_plan" "this" {
 resource "aws_api_gateway_usage_plan_key" "this" {
   count = try(var.api_key_config.usage_plan, null) != null ? 1 : 0
 
-  key_id         = aws_api_gateway_api_key.this[0].id
-  key_type       = "API_KEY"
-  usage_plan_id  = aws_api_gateway_usage_plan.this[0].id
+  key_id        = aws_api_gateway_api_key.this[0].id
+  key_type      = "API_KEY"
+  usage_plan_id = aws_api_gateway_usage_plan.this[0].id
 }
 
 # ============================================================================
@@ -176,7 +182,7 @@ resource "aws_api_gateway_usage_plan_key" "this" {
 resource "aws_lambda_permission" "alias" {
   for_each = local.alias_permissions
 
-  statement_id  = "AllowAPIGatewayInvoke-${var.stage_name}-${each.key}"
+  statement_id  = "AllowAPIGatewayInvoke-${var.stage_name}-${each.key}${local.lambda_permission_statement_id_suffix_fragment}"
   action        = "lambda:InvokeFunction"
   function_name = each.value.function_arn
   qualifier     = each.value.qualifier

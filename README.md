@@ -398,6 +398,7 @@ module "api_gateway" {
 | `tags` | `map(string)` | `{}` | Tags para todos los recursos |
 | `endpoint_type` | `string` | `"REGIONAL"` | Tipo de endpoint (REGIONAL, EDGE, PRIVATE) |
 | `waf_web_acl_arn` | `string` | `null` | ARN del Web ACL WAFv2 para asociar al stage (opcional, requiere `endpoint_type = "REGIONAL"`) |
+| `lambda_permission_statement_id_suffix` | `string` | `null` | Sufijo opcional para los `statement_id` de permisos Lambda (integraciones, authorizers y alias en `stage`). Úsalo con un valor distinto por API cuando la misma función se integra en más de un API Gateway y evitar `ResourceConflictException` (409). `null` o vacío mantiene el comportamiento anterior |
 | `create_stage` | `bool` | `true` | Si es `false`, solo crea el API REST sin stage (útil para separar en múltiples states) |
 | `lambda_integrations` | `any` (lista) | `[]` | Lista de integraciones; ver tabla siguiente. Compatible con `TF_VAR_lambda_integrations` (JSON) omitiendo claves opcionales |
 
@@ -500,6 +501,7 @@ El módulo incluye un submódulo `modules/stage` que permite crear stages indepe
 | `api_key_config` | `object` | `null` | Configuración de API Key y Usage Plan |
 | `method_settings` | `map(object)` | `{}` | Configuración por método |
 | `lambda_integrations` | `any` (lista) | `[]` | Integraciones para permisos por alias; ver subsección. Compatible con `TF_VAR_*` omitiendo `lambda_alias_variable` |
+| `lambda_permission_statement_id_suffix` | `string` | `null` | Mismo criterio que en el módulo raíz: debe coincidir si gestionas la misma Lambda desde varios API; obligatorio para desambiguar permisos por alias entre APIs con el mismo `stage_name` |
 
 ### Ejemplo de Uso del Submódulo
 
@@ -543,6 +545,10 @@ El módulo utiliza internamente la especificación OpenAPI 3.0 para definir la A
 Cuando se usa `lambda_alias_variable`, la URI de integración se construye con la sintaxis `${stageVariables.<nombre>}`, que API Gateway resuelve en tiempo de ejecución según el stage que recibe la solicitud. Esto permite que diferentes stages invoquen diferentes aliases de Lambda sin cambiar la definición del API.
 
 La asociación de WAFv2 se realiza con un recurso dedicado (`aws_wafv2_web_acl_association`) y no forma parte del spec OpenAPI.
+
+### Permisos Lambda y varios API Gateway
+
+Los recursos `aws_lambda_permission` usan un `statement_id` único **por función Lambda**. Si reutilizas la misma función en más de un REST API (stacks distintos) y comparten path+método, claves de authorizer o combinación `stage_name` + índice de integración con alias, sin un sufijo distinto por API obtendrás error 409 al aplicar. Define `lambda_permission_statement_id_suffix` con un valor estable por API (por ejemplo un slug del nombre del servicio). Si llamas al submódulo `stage` por separado, pasa el mismo sufijo ahí para los permisos por alias.
 
 ## Testing
 

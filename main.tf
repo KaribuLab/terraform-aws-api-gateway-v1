@@ -39,6 +39,12 @@ locals {
     )
   ]
 
+  lambda_permission_statement_id_suffix_fragment = (
+    var.lambda_permission_statement_id_suffix != null && trimspace(var.lambda_permission_statement_id_suffix) != ""
+    ? "-${trimspace(var.lambda_permission_statement_id_suffix)}"
+    : ""
+  )
+
   integrations_by_path = {
     for path in distinct([for i in local.lambda_integrations : i.path]) :
     path => [for i in local.lambda_integrations : i if i.path == path]
@@ -222,7 +228,7 @@ resource "aws_api_gateway_rest_api" "this" {
 resource "aws_lambda_permission" "integration" {
   for_each = local.lambda_permission_keys
 
-  statement_id  = "AllowAPIGatewayInvoke-${each.key}"
+  statement_id  = "AllowAPIGatewayInvoke-${each.key}${local.lambda_permission_statement_id_suffix_fragment}"
   action        = "lambda:InvokeFunction"
   function_name = each.value.lambda_function_arn
   principal     = "apigateway.amazonaws.com"
@@ -236,7 +242,7 @@ resource "aws_lambda_permission" "integration" {
 resource "aws_lambda_permission" "authorizer" {
   for_each = var.authorizers
 
-  statement_id  = "AllowAPIGatewayInvokeAuthorizer-${each.key}"
+  statement_id  = "AllowAPIGatewayInvokeAuthorizer-${each.key}${local.lambda_permission_statement_id_suffix_fragment}"
   action        = "lambda:InvokeFunction"
   function_name = each.value.lambda_arn
   principal     = "apigateway.amazonaws.com"
@@ -297,4 +303,6 @@ module "stage" {
     }
     if i.lambda_alias_variable != null
   ]
+
+  lambda_permission_statement_id_suffix = var.lambda_permission_statement_id_suffix
 }
