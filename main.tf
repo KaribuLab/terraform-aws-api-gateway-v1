@@ -39,9 +39,10 @@ locals {
     )
   ]
 
+  lambda_permission_statement_id_suffix_normalized = trimspace(coalesce(var.lambda_permission_statement_id_suffix, ""))
   lambda_permission_statement_id_suffix_fragment = (
-    var.lambda_permission_statement_id_suffix != null && trimspace(var.lambda_permission_statement_id_suffix) != ""
-    ? "-${trimspace(var.lambda_permission_statement_id_suffix)}"
+    local.lambda_permission_statement_id_suffix_normalized != ""
+    ? "-${local.lambda_permission_statement_id_suffix_normalized}"
     : ""
   )
 

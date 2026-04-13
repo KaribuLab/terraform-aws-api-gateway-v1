@@ -50,6 +50,7 @@ variable "lambda_permission_statement_id_suffix" {
     Usa un valor estable y distinto por API (ej. nombre corto del API). Solo caracteres válidos para StatementId de Lambda (recomendado: letras, números, guiones; longitud total del id ≤ 100 caracteres).
 
     null o cadena vacía: mismo comportamiento que antes (sin sufijo).
+    Acepta null (Terragrunt/JSON); equivale a omitir el sufijo.
   EOT
   type        = string
   default     = null

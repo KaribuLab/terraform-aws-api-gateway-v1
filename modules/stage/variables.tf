@@ -167,6 +167,7 @@ variable "lambda_permission_statement_id_suffix" {
   description = <<-EOT
     Sufijo opcional para el statement_id de aws_lambda_permission.alias.
     Debe coincidir con el del modulo raiz cuando ambos gestionan la misma Lambda en APIs distintos (StatementId unico por funcion).
+    Acepta null (Terragrunt/JSON); equivale a omitir el sufijo.
   EOT
   type        = string
   default     = null
