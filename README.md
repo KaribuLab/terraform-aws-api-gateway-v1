@@ -414,7 +414,7 @@ module "api_gateway" {
 | `authorization_type` | `string` | `"NONE"` | Tipo de autorización (NONE, CUSTOM) |
 | `authorizer_key` | `string` | `null` | Clave del authorizer (requerido si `authorization_type = "CUSTOM"`) |
 | `api_key_required` | `bool` | `false` | Si requiere API Key |
-| `enable_cors` | `bool` | `false` | Habilitar CORS |
+| `enable_cors` | `bool` | `false` | Habilitar CORS (OPTIONS + HEAD mock) |
 | `cors_allow_origin` | `string` | `"'*'"` | Valor de Access-Control-Allow-Origin |
 | `cors_allow_headers` | `string` | headers estándar | Headers permitidos en CORS |
 | `cors_allow_methods` | `string` | auto-generado | Métodos permitidos en CORS |
@@ -539,7 +539,7 @@ El módulo utiliza internamente la especificación OpenAPI 3.0 para definir la A
 - Paths y métodos HTTP
 - Integraciones `AWS_PROXY` con Lambda (con soporte para stage variables en la URI)
 - Security schemes para authorizers y API Keys
-- Métodos OPTIONS para CORS con integración mock
+- Métodos OPTIONS y HEAD para CORS con integración mock (incluye raíz `/` = invoke URL `.../{stage}`)
 - Endpoint configuration del API (REGIONAL/EDGE/PRIVATE)
 
 Cuando se usa `lambda_alias_variable`, la URI de integración se construye con la sintaxis `${stageVariables.<nombre>}`, que API Gateway resuelve en tiempo de ejecución según el stage que recibe la solicitud. Esto permite que diferentes stages invoquen diferentes aliases de Lambda sin cambiar la definición del API.

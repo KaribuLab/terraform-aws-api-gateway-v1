@@ -80,22 +80,90 @@ locals {
     )
   }
 
+  # Primera integración con CORS (defaults para raíz / y paths sin override)
+  cors_default_config = (
+    length([for i in local.lambda_integrations : i if i.enable_cors]) > 0
+    ? [for i in local.lambda_integrations : i if i.enable_cors][0]
+    : {}
+  )
+
+  # Stage raíz `/` = invoke URL .../execute-api.../{stage}. Browser HEAD pega ahí.
+  cors_mock_paths = toset(concat(
+    tolist(local.cors_paths),
+    length(local.cors_paths) > 0 ? ["/"] : []
+  ))
+
   # CORS: calcular métodos permitidos por path
   cors_methods_by_path = {
-    for path in local.cors_paths :
-    path => join(",", concat(
-      [for i in local.integrations_by_path[path] : i.method],
-      ["OPTIONS"]
-    ))
+    for path in local.cors_mock_paths :
+    path => join(",", distinct(concat(
+      path == "/"
+      ? flatten([
+        for p in local.cors_paths : [
+          for i in local.integrations_by_path[p] : i.method
+        ]
+      ])
+      : [for i in try(local.integrations_by_path[path], []) : i.method],
+      ["OPTIONS", "HEAD"]
+    )))
   }
 
   # Primera integración con CORS habilitado por path (para tomar defaults)
   cors_config_by_path = {
-    for path in local.cors_paths :
-    path => [for i in local.integrations_by_path[path] : i if i.enable_cors][0]
+    for path in local.cors_mock_paths :
+    path => (
+      contains(local.cors_paths, path)
+      ? [for i in local.integrations_by_path[path] : i if i.enable_cors][0]
+      : local.cors_default_config
+    )
   }
 
-  openapi_paths = {
+  # HEAD auto solo si el path no tiene integración HEAD ni ANY
+  cors_auto_head_paths = toset([
+    for path in local.cors_mock_paths : path
+    if !anytrue([
+      for i in try(local.integrations_by_path[path], []) :
+      contains(["HEAD", "ANY"], upper(i.method))
+    ])
+  ])
+
+  cors_mock_operation = {
+    for path in local.cors_mock_paths :
+    path => {
+      security = []
+      responses = {
+        "200" = {
+          description = "CORS response"
+          headers = {
+            Access-Control-Allow-Origin  = { schema = { type = "string" } }
+            Access-Control-Allow-Methods = { schema = { type = "string" } }
+            Access-Control-Allow-Headers = { schema = { type = "string" } }
+          }
+        }
+      }
+      x-amazon-apigateway-integration = {
+        type = "mock"
+        requestTemplates = {
+          "application/json" = "{\"statusCode\": 200}"
+        }
+        responses = {
+          default = {
+            statusCode = "200"
+            responseParameters = {
+              "method.response.header.Access-Control-Allow-Headers" = local.cors_config_by_path[path].cors_allow_headers
+              "method.response.header.Access-Control-Allow-Methods" = coalesce(
+                local.cors_config_by_path[path].cors_allow_methods,
+                "'${local.cors_methods_by_path[path]}'"
+              )
+              "method.response.header.Access-Control-Allow-Origin" = local.cors_config_by_path[path].cors_allow_origin
+            }
+          }
+        }
+      }
+    }
+  }
+
+  openapi_paths_from_integrations = {
     for path, integrations in local.integrations_by_path :
     path => merge(
       {
@@ -114,43 +182,39 @@ locals {
           : {}
         )
       },
-      contains(local.cors_paths, path) ? {
-        options = {
-          summary  = "CORS preflight"
-          security = []
-          responses = {
-            "200" = {
-              description = "CORS preflight response"
-              headers = {
-                Access-Control-Allow-Origin  = { schema = { type = "string" } }
-                Access-Control-Allow-Methods = { schema = { type = "string" } }
-                Access-Control-Allow-Headers = { schema = { type = "string" } }
-              }
-            }
-          }
-          x-amazon-apigateway-integration = {
-            type = "mock"
-            requestTemplates = {
-              "application/json" = "{\"statusCode\": 200}"
-            }
-            responses = {
-              default = {
-                statusCode = "200"
-                responseParameters = {
-                  "method.response.header.Access-Control-Allow-Headers" = local.cors_config_by_path[path].cors_allow_headers
-                  "method.response.header.Access-Control-Allow-Methods" = coalesce(
-                    local.cors_config_by_path[path].cors_allow_methods,
-                    "'${local.cors_methods_by_path[path]}'"
-                  )
-                  "method.response.header.Access-Control-Allow-Origin" = local.cors_config_by_path[path].cors_allow_origin
-                }
-              }
-            }
-          }
-        }
-      } : {}
+      contains(local.cors_mock_paths, path) ? merge(
+        {
+          options = merge(local.cors_mock_operation[path], {
+            summary = "CORS preflight"
+          })
+        },
+        contains(local.cors_auto_head_paths, path) ? {
+          head = merge(local.cors_mock_operation[path], {
+            summary = "CORS HEAD"
+          })
+        } : {}
+      ) : {}
     )
   }
+
+  # Si no hay integración en `/`, igual exponer OPTIONS+HEAD en raíz del stage
+  openapi_paths = merge(
+    local.openapi_paths_from_integrations,
+    length(local.cors_paths) > 0 && !contains(keys(local.integrations_by_path), "/") ? {
+      "/" = merge(
+        {
+          options = merge(local.cors_mock_operation["/"], {
+            summary = "CORS preflight"
+          })
+        },
+        contains(local.cors_auto_head_paths, "/") ? {
+          head = merge(local.cors_mock_operation["/"], {
+            summary = "CORS HEAD"
+          })
+        } : {}
+      )
+    } : {}
+  )
 
   # Extraer nombre del header desde identity_source (ej: method.request.header.Authorization -> Authorization)
   security_schemes = {

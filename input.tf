@@ -75,7 +75,7 @@ variable "lambda_integrations" {
     - authorization_type: Tipo de autorización (NONE, CUSTOM). Default: NONE
     - authorizer_key: Clave del authorizer en var.authorizers (requerido si authorization_type = CUSTOM)
     - api_key_required: Si requiere API Key. Default: false
-    - enable_cors: Habilitar CORS automático. Default: false
+    - enable_cors: Habilitar CORS automático (OPTIONS + HEAD mock). Default: false
     - cors_allow_origin: Valor de Access-Control-Allow-Origin. Default: "'*'"
     - cors_allow_headers: Headers permitidos en CORS. Default: estándar
     - cors_allow_methods: Métodos permitidos en CORS (se genera automáticamente si no se especifica)
