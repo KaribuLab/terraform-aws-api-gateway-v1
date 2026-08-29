@@ -80,17 +80,26 @@ locals {
     )
   }
 
+  # Raíz `/` no sale de lambda_integrations. Se inyecta en el spec OpenAPI.
+  create_cors_root = coalesce(var.enable_cors_root, length(local.cors_paths) > 0)
+
+  cors_fallback_config = {
+    cors_allow_origin  = "'*'"
+    cors_allow_headers = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    cors_allow_methods = null
+  }
+
   # Primera integración con CORS (defaults para raíz / y paths sin override)
   cors_default_config = (
     length([for i in local.lambda_integrations : i if i.enable_cors]) > 0
     ? [for i in local.lambda_integrations : i if i.enable_cors][0]
-    : {}
+    : local.cors_fallback_config
   )
 
   # Stage raíz `/` = invoke URL .../execute-api.../{stage}. Browser HEAD pega ahí.
   cors_mock_paths = toset(concat(
     tolist(local.cors_paths),
-    length(local.cors_paths) > 0 ? ["/"] : []
+    local.create_cors_root ? ["/"] : []
   ))
 
   # CORS: calcular métodos permitidos por path
@@ -197,10 +206,10 @@ locals {
     )
   }
 
-  # Si no hay integración en `/`, igual exponer OPTIONS+HEAD en raíz del stage
+  # `/` no viene de lambda_integrations: se agrega al spec si create_cors_root
   openapi_paths = merge(
     local.openapi_paths_from_integrations,
-    length(local.cors_paths) > 0 && !contains(keys(local.integrations_by_path), "/") ? {
+    local.create_cors_root && !contains(keys(local.integrations_by_path), "/") ? {
       "/" = merge(
         {
           options = merge(local.cors_mock_operation["/"], {

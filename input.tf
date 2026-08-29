@@ -57,6 +57,20 @@ variable "lambda_permission_statement_id_suffix" {
   nullable    = true
 }
 
+variable "enable_cors_root" {
+  description = <<-EOT
+    Crear OPTIONS y HEAD mock en el recurso raíz `/`.
+    Ese path es la invoke URL del stage (https://{api}.execute-api.{region}.amazonaws.com/{stage}),
+    no un lambda_integration. No hace falta declarar path = "/".
+
+    null (default): true si algún lambda_integration tiene enable_cors.
+    true/false: forzar creación o no, independiente de las integraciones.
+  EOT
+  type        = bool
+  default     = null
+  nullable    = true
+}
+
 # ============================================================================
 # Integraciones Lambda
 # ============================================================================
@@ -75,7 +89,8 @@ variable "lambda_integrations" {
     - authorization_type: Tipo de autorización (NONE, CUSTOM). Default: NONE
     - authorizer_key: Clave del authorizer en var.authorizers (requerido si authorization_type = CUSTOM)
     - api_key_required: Si requiere API Key. Default: false
-    - enable_cors: Habilitar CORS automático (OPTIONS + HEAD mock). Default: false
+    - enable_cors: Habilitar CORS automático (OPTIONS + HEAD mock) en ESTE path. Default: false
+      No crea el recurso raíz `/`. Eso va aparte: var.enable_cors_root.
     - cors_allow_origin: Valor de Access-Control-Allow-Origin. Default: "'*'"
     - cors_allow_headers: Headers permitidos en CORS. Default: estándar
     - cors_allow_methods: Métodos permitidos en CORS (se genera automáticamente si no se especifica)

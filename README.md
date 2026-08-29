@@ -397,6 +397,7 @@ module "api_gateway" {
 | `stage_name` | `string` | - | Nombre del stage (requerido si `create_stage = true`) |
 | `tags` | `map(string)` | `{}` | Tags para todos los recursos |
 | `endpoint_type` | `string` | `"REGIONAL"` | Tipo de endpoint (REGIONAL, EDGE, PRIVATE) |
+| `enable_cors_root` | `bool` | `null` (auto) | OPTIONS + HEAD mock en `/` (invoke URL `.../{stage}`). Auto: true si algún `enable_cors`. No requiere `path = "/"` |
 | `waf_web_acl_arn` | `string` | `null` | ARN del Web ACL WAFv2 para asociar al stage (opcional, requiere `endpoint_type = "REGIONAL"`) |
 | `lambda_permission_statement_id_suffix` | `string` (nullable) | `null` | Sufijo opcional para los `statement_id` de permisos Lambda (integraciones, authorizers y alias en `stage`). Úsalo con un valor distinto por API cuando la misma función se integra en más de un API Gateway y evitar `ResourceConflictException` (409). `null`, cadena vacía o solo espacios: sin sufijo (mismo comportamiento que antes). Válido pasar `null` desde Terragrunt o JSON |
 | `create_stage` | `bool` | `true` | Si es `false`, solo crea el API REST sin stage (útil para separar en múltiples states) |
@@ -414,7 +415,7 @@ module "api_gateway" {
 | `authorization_type` | `string` | `"NONE"` | Tipo de autorización (NONE, CUSTOM) |
 | `authorizer_key` | `string` | `null` | Clave del authorizer (requerido si `authorization_type = "CUSTOM"`) |
 | `api_key_required` | `bool` | `false` | Si requiere API Key |
-| `enable_cors` | `bool` | `false` | Habilitar CORS (OPTIONS + HEAD mock) |
+| `enable_cors` | `bool` | `false` | CORS (OPTIONS + HEAD mock) en el path de la integración. No crea `/` |
 | `cors_allow_origin` | `string` | `"'*'"` | Valor de Access-Control-Allow-Origin |
 | `cors_allow_headers` | `string` | headers estándar | Headers permitidos en CORS |
 | `cors_allow_methods` | `string` | auto-generado | Métodos permitidos en CORS |
