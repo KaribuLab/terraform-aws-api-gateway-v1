@@ -8,6 +8,12 @@ source_branch="feature/karibu-mirror"
 target_branch="master"
 source_repo_dir="${SOURCE_REPO_DIR:-..}"
 mirror_subdir="${MIRROR_SUBDIR:-karibu/terraform-aws-web}"
+module_name="${MODULE_NAME}"
+
+if [ -z "$module_name" ]; then
+    echo "MODULE_NAME is not set"
+    exit 1
+fi
 
 commit_message=$( git -C "$source_repo_dir" log -1 --pretty=%s 2>/dev/null || git log -1 --pretty=%s )
 
@@ -51,7 +57,7 @@ curl -sL https://github.com/KaribuLab/kli/releases/download/v0.2.2/kli  --output
 created_commit=false
 # Commit changes
 if ! git diff --cached --quiet; then
-    git commit -m "feat: Mirror from GitHub: $commit_message"
+    git commit -m "feat($module_name): Mirror from GitHub: $commit_message"
     created_commit=true
 else
     echo "No staged changes to commit"
