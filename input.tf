@@ -150,6 +150,11 @@ variable "authorizers" {
   description = <<-EOT
     Mapa de Lambda Authorizers para el API Gateway.
     La clave del mapa se usa como referencia en lambda_integrations[].authorizer_key.
+
+    create_permission (default true): crea aws_lambda_permission para ese authorizer.
+    false: no crea el permiso. Úsalo cuando la resource policy de la Lambda ya existe
+    en otra cuenta y ya permite la invocación desde este API Gateway (u otras cuentas).
+    El authorizer sigue declarándose en el spec OpenAPI.
   EOT
   type = map(object({
     lambda_arn                     = string
@@ -158,6 +163,7 @@ variable "authorizers" {
     identity_source                = optional(string, "method.request.header.Authorization")
     authorizer_result_ttl          = optional(number, 300)
     identity_validation_expression = optional(string, null)
+    create_permission              = optional(bool, true)
   }))
   default = {}
 

@@ -314,7 +314,10 @@ resource "aws_lambda_permission" "integration" {
 # ============================================================================
 
 resource "aws_lambda_permission" "authorizer" {
-  for_each = var.authorizers
+  for_each = {
+    for key, auth in var.authorizers : key => auth
+    if auth.create_permission
+  }
 
   statement_id  = "AllowAPIGatewayInvokeAuthorizer-${each.key}${local.lambda_permission_statement_id_suffix_fragment}"
   action        = "lambda:InvokeFunction"

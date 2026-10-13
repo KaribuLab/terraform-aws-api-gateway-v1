@@ -434,6 +434,7 @@ module "api_gateway" {
 | `identity_source` | `string` | `"method.request.header.Authorization"` | Fuente de identidad |
 | `authorizer_result_ttl` | `number` | `300` | TTL del resultado en segundos |
 | `identity_validation_expression` | `string` | `null` | Expresión regex de validación |
+| `create_permission` | `bool` | `true` | Crear `aws_lambda_permission` de este authorizer. `false` cuando la resource policy de la Lambda ya existe en otra cuenta y ya permite invocarla desde este API (u otras cuentas). El authorizer sigue en el spec OpenAPI |
 
 ### Stage Configuration
 
@@ -548,6 +549,8 @@ Cuando se usa `lambda_alias_variable`, la URI de integración se construye con l
 La asociación de WAFv2 se realiza con un recurso dedicado (`aws_wafv2_web_acl_association`) y no forma parte del spec OpenAPI.
 
 ### Permisos Lambda y varios API Gateway
+
+En cada authorizer, `create_permission = false` omite solo su `aws_lambda_permission`. Los permisos de integraciones y de alias siguen creándose. El authorizer permanece en el spec OpenAPI. Úsalo cuando la Lambda vive en otra cuenta y su resource policy ya autoriza a API Gateway a invocarla.
 
 Los recursos `aws_lambda_permission` usan un `statement_id` único **por función Lambda**. Si reutilizas la misma función en más de un REST API (stacks distintos) y comparten path+método, claves de authorizer o combinación `stage_name` + índice de integración con alias, sin un sufijo distinto por API obtendrás error 409 al aplicar. Define `lambda_permission_statement_id_suffix` con un valor estable por API (por ejemplo un slug del nombre del servicio). Si llamas al submódulo `stage` por separado, pasa el mismo sufijo ahí para los permisos por alias.
 
