@@ -64,7 +64,8 @@ else
 fi
 # Push to bitbucket (usar -u para crear la rama remota si no existe)
 git push -u origin "$source_branch"
-latest_version=$( /tmp/kli semver 2>&1 )
+latest_version=$( /tmp/kli semver )
+latest_version="${latest_version}-karibu"
 # Create a new tag
 if git rev-parse -q --verify "refs/tags/$latest_version" >/dev/null || \
    git ls-remote --exit-code --tags origin "refs/tags/$latest_version" >/dev/null 2>&1; then
